@@ -1,0 +1,108 @@
+# Reverse Gear
+# When reverse gear is detected, start two monitors to ensure that we have a
+# backup camera and that we are not moving forward while in reverse.
+#
+# We start the process by unconditionally emitting a signal, transmission.gear,
+# set to 'reverse'
+emit:
+    signal: transmission.gear
+    value: 'reverse'
+
+# We now monitor the incoming signal stream for specific conditions to be met.
+parallel:
+    - condition: transmission.gear == 'reverse'
+      # When this monitor's condition (gear in reverse) becomes true, a signal
+      # will be emitted to turn the backup light.
+      emit:
+        # Emit a signal to turn on the backup light when the hosting condition
+        # becomes true.
+        #
+        # We can emit signals when the condition becomes false, or always
+        # (both when true and false)
+        when: always
+        # How many msec to wait after condition changes before we emit the
+        # signal.
+        delay: 100
+
+        # Which signal to emit
+        signal: lights.external.backup
+
+        # The value emitted can be a generic expression
+        value: camera.backup.active
+
+      # All monitors under the 'parallel:' element will be activated in
+      # parallel.
+      #
+      # If one monitor condition becomes true it will activate its child
+      # monitors and execute its emits. If, subsequenctly, a second monitor
+      # hosted under the same 'parallel:' element also becomes true it will
+      # also activate its child monitors and emits independently of the first
+      # one.
+      # If you want to deactivate the other monitors under a 'parallel:'
+      # element as soon as a specific one evaluates to true, insert the
+      # 'break:' tag somewhere into the monitor that should preempt the others.
+      # This will trigger one and only one of the monitors under a 'parallel:'
+      # element.
+      parallel:
+
+        # We want to see the backup camera being active within 100 msec of the
+        # vehicle being put in reverse.
+        #
+        # This monitor will be active from 'start' msec after it becomes
+        # active, or when the parent condition becomes false.
+        - condition: camera.backup.active == true
+
+          # How many msec do we wait after parent condition becomes true
+          # (gear = reverse) until we require our condition (backup camera
+          # active) to also be true.
+          start: 100
+
+          # How many msec after activation do we keep the monitor active?
+          # The monitor condition has to remain true for 'stop' milliseconds
+          # after the monitor is started. If those criteria are not fulfilled,
+          # an error will be logged
+          stop: 1000
+
+          # Use the 'sequence:' element if you want a specific set of
+          # conditions to become true in a given sequence. The same effect
+          # can be achieved by nesting a number of confitions inside each
+          # other, but a 'sequence:' keyword greatly eases readability
+          sequence:
+            # We first want the backup radar to become active.
+            - condition: radar.backup.active == true
+              # Give the backup radar 200 msec to become active
+              start: 200
+
+              # The monitor, once started, remains active until the parent
+              # condition (backup camera active) becomes false.
+              stop: 0
+            
+              # Once the backup radar is active, we then want the backup camera
+              # application to be active.
+            - condition: ivi.application.back_up_camera.active == true
+              # Give the backup app 100 ms to become active
+              start: 100
+
+              # The monitor, once started, remains active until the parent
+              # condition (backup camera active) becomes false.
+              stop: 0
+
+        # For as long as the gear is in reverse, we want to ensure that the
+        # vehicle is standing still or moving forward.
+        #
+        # Since both the backup camera and transmission speed condition
+        # are hosted under a 'parallel:' element, both the backup camera
+        # and transmission speed will be monitored simultaneously.
+        #
+        # If the backup camera becomes active, and that monitor in its turn
+        # starts monitoring for the backup radar and IVI app sequence, the
+        # transmission speed will still be monitored to ensure that the
+        # vehicle is only moving backwards.
+        - condition: transmission.speed <= 0
+          # Car may still be rolling forward as reverse is engaged.
+          # Wait 1000 msec before activating monitor.
+          start: 1000
+
+          # The monitor, once started, remains active until the parent
+          # condition (gear = reversed) becomes false.
+          stop: 0
