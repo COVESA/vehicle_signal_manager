@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+#
+# Copyright (C) 2017, Jaguar Land Rover
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Authors:
+#  * Gustavo Noronha <gustavo.noronha@collabora.com>
+#  * Shane Fagan <shane.fagan@collabora.com>
+
+import sys
+import argparse
+import yaml
+import ast
+
+LOGIC_REPLACE = {'||': 'or',
+                 '&&': 'and',
+                 'true': 'True',
+                 'false': 'False'}
+
+KEYWORDS = ['condition', 'emit']
+
+class State(object):
+    '''
+        Class to handle states
+    '''
+    def __init__(self, initial_state, rules):
+        class VariablesStorage(object):
+            pass
+        self.variables = VariablesStorage()
+
+        self.rules = {}
+        with open(rules) as rules_file:
+            self.parse_rules(rules_file)
+
+        if initial_state:
+            with open(initial_state) as f:
+                data = yaml.load(f.read())
+
+                for item in data:
+                    item = item.replace(" ", "").split("=")
+                    vars(self.variables)[item[0]] = item[1]
+
+    def parse_rules(self, rules_file):
+        '''
+            Parse YAML rules for policy manager and return ast code.
+        '''
+        data = rules_file.read()
+
+        # Translate logical operations to Python, so that they
+        # can be compiled.
+        for key, value in LOGIC_REPLACE.items():
+             data = data.replace(key, value).strip()
+
+        data = yaml.load(data)
+
+        # Process rule logic and turn it into AST.
+        for block in data:
+            for word in block:
+                if word == "condition":
+                    condition = block[word]
+                    condition = ast.parse(condition).body[0]
+
+                elif word == "emit":
+                    signal = block[word]["signal"]
+                    value = block[word]["value"]
+                    action = "emit(\'{}\', \'{}\')".format(signal, value)
+                    action = ast.parse(action).body[0]
+
+                else:
+                    print("Unhandled keyword {}".format(word))
+
+            ifnode = ast.If(condition.value, [action], [])
+            ast_module = ast.Module([ifnode])
+
+            ast.fix_missing_locations(ast_module)
+
+            rule = compile(ast_module, '<string>', 'exec')
+            self.add_rule(condition, rule)
+
+    def add_rule(self, condition, rule):
+        tracked_signal = None
+
+        names = []
+        attributes = []
+        for node in ast.walk(condition):
+            if isinstance(node, ast.Attribute):
+                attributes.append(node.attr)
+            if isinstance(node, ast.Name):
+                name = node.id
+                if attributes:
+                    name = '.'.join(reversed(attributes + [name]))
+                    attributes = []
+                names.append(name)
+
+        for signal_name in names:
+            if not signal_name in self.rules:
+                self.rules[signal_name] = []
+            self.rules[signal_name].append(rule)
+
+    def got_signal(self, signal, value):
+        vars(self.variables)[signal] = value
+
+        # No conditions based on the signal that was emitted,
+        # nothing to be done.
+        if not signal in self.rules:
+            return
+
+        for rule in self.rules[signal]:
+            try:
+                exec(rule, globals(), vars(self.variables))
+            except NameError:
+                # Names used in rules are not always present
+                # in the state.
+                pass
+
+
+def emit(signal, value):
+    print('{} = {}'.format(signal, value))
+
+
+def process(state, signal, value):
+    '''
+        Handle the emitting of signals and adding values to state
+    '''
+    def is_string(value):
+        return (value[0] == '"' or value[0] == "'") and \
+            (value[-1] == '"' or value[-1] == "'")
+
+    def is_bool(value):
+        return value == 'true' or value == 'false'
+
+    # from str to int or float (if that is needed)
+    if is_string(value):
+        value = value[1:-1]
+    elif is_bool(value):
+        value = value == 'true' or False
+    else:
+        if value.isalnum():
+            if '.' in value:
+                value = float(value)
+            else:
+                value = int(value)
+
+    state.got_signal(signal, value)
+
+
+def run(state):
+    '''
+        Loop to grab logic from stdin, then spawn a threads for processing
+    '''
+    for line in sys.stdin:
+        line = line.replace(" ", "").strip('\n')
+        if line == "":
+            # Ignore blank lines
+            pass
+        if line == "quit":
+            break
+        elif "=" in line:
+            line = line.split("=")
+            process(state, line[0], line[1])
+        else:
+            process(state, line, None)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--initial-state', type=str,
+                        help='Initial state, yaml file', required=False)
+    parser.add_argument('rules', type=str,
+                        help='yaml rules configuration')
+    args = parser.parse_args()
+
+    state = State(args.initial_state, args.rules)
+    run(state)
