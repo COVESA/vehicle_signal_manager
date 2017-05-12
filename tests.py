@@ -61,5 +61,12 @@ class TestVSM(unittest.TestCase):
         expected_output = 'car.stop = True\n'
         self.run_vsm('simple2', input_data, expected_output, False)
 
+    @unittest.skip("delays not yet implemented")
+    def test_delay(self):
+        input_data = ''
+        expected_output = 'lights.external.headlights = True\n'
+        # NOTE: ideally, this would ensure the delay in output
+        self.run_vsm('delay', input_data, expected_output, False)
+
 if __name__ == '__main__':
     unittest.main()
