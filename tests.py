@@ -74,5 +74,12 @@ class TestVSM(unittest.TestCase):
         expected_output = 'lock_state = False\nhorn = True\n'
         self.run_vsm('exclusive_conditions', input_data, expected_output, False)
 
+    @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
+    def test_subclauses_arithmetic_booleans(self):
+        input_data = 'flux_capacitor.energy_generated = 1.1\nmovement.speed = 140'
+        expected_output = 'lights.external.time_travel_imminent\nlights.internal.time_travel_imminent\n'
+        self.run_vsm('subclauses_arithmetic_booleans', input_data,
+                expected_output, False)
+
 if __name__ == '__main__':
     unittest.main()
