@@ -28,37 +28,37 @@ class TestVSM(unittest.TestCase):
         process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
         output, _ = process.communicate(input=input_data.encode(), timeout=2)
+        self.assertEqual(output.decode(), expected_output)
 
-        self.assertEqual(output.decode() , expected_output)
 
     def test_simple0(self):
         input_data = 'transmission_gear = "reverse"'
-        expected_output = 'car.backup = True\n'
+        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup = True\n'
         self.run_vsm('simple0', input_data, expected_output)
 
     def test_simple0_uninteresting(self):
         input_data = 'phone_call = "inactive"'
-        expected_output = ''
+        expected_output = 'State = {\nphone_call = inactive\n}\n'
         self.run_vsm('simple0', input_data, expected_output)
 
     def test_simple2_initial(self):
         input_data = 'damage = true'
-        expected_output = 'car.stop = True\n'
+        expected_output = 'State = {\ndamage = True\nmoving = false\n}\ncar.stop = True\n'
         self.run_vsm('simple2', input_data, expected_output)
 
     def test_simple2_initial_uninteresting(self):
         input_data = 'moving = false'
-        expected_output = ''
+        expected_output = 'State = {\nmoving = False\n}\n'
         self.run_vsm('simple2', input_data, expected_output)
 
     def test_simple2_modify_uninteresting(self):
         input_data = 'moving = true\ndamage = true'
-        expected_output = ''
+        expected_output = 'State = {\nmoving = True\n}\nState = {\ndamage = True\nmoving = True\n}\n'
         self.run_vsm('simple2', input_data, expected_output)
 
     def test_simple2_multiple_signals(self):
         input_data = 'moving = false\ndamage = true'
-        expected_output = 'car.stop = True\n'
+        expected_output = 'State = {\nmoving = False\n}\nState = {\ndamage = True\nmoving = False\n}\ncar.stop = True\n'
         self.run_vsm('simple2', input_data, expected_output, False)
 
     @unittest.skip("delays not yet implemented")
