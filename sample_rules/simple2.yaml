@@ -1,0 +1,4 @@
+- condition: moving != true && damage == true
+  emit:
+    signal: car.stop
+    value: true
