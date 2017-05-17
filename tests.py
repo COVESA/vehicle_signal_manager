@@ -61,5 +61,25 @@ class TestVSM(unittest.TestCase):
         expected_output = 'car.stop = True\n'
         self.run_vsm('simple2', input_data, expected_output, False)
 
+    @unittest.skip("delays not yet implemented")
+    def test_delay(self):
+        input_data = ''
+        expected_output = 'lights.external.headlights = True\n'
+        # NOTE: ideally, this would ensure the delay in output
+        self.run_vsm('delay', input_data, expected_output, False)
+
+    @unittest.skip("exclusive conditions not yet implemented")
+    def test_exclusive_conditions(self):
+        input_data = 'remote_key.command = "unlock"\nlock_state = true\nremote_key.command = "lock"'
+        expected_output = 'lock_state = False\nhorn = True\n'
+        self.run_vsm('exclusive_conditions', input_data, expected_output, False)
+
+    @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
+    def test_subclauses_arithmetic_booleans(self):
+        input_data = 'flux_capacitor.energy_generated = 1.1\nmovement.speed = 140'
+        expected_output = 'lights.external.time_travel_imminent\nlights.internal.time_travel_imminent\n'
+        self.run_vsm('subclauses_arithmetic_booleans', input_data,
+                expected_output, False)
+
 if __name__ == '__main__':
     unittest.main()

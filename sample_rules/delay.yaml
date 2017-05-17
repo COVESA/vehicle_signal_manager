@@ -18,9 +18,9 @@ parallel:
           # How many msec to wait after condition changes before we emit the
           # signal.
           #
-          # The delay in this use case is a bit arbitrary but this
-          # configuration file is purely to test the delay feature.
-          delay: 100
+          # The delay in this use case is arbitrary and exaggerated so this
+          # configuration file can be used to test the delay feature.
+          delay: 2000
 
           signal: lights.external.headlights
           value: true
