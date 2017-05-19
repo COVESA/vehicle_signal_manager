@@ -1,0 +1,5 @@
+- condition: transmission_gear == 'reverse'
+  emit:
+    signal: car.backup
+    value: true
+    delay: 100

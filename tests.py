@@ -27,7 +27,7 @@ class TestVSM(unittest.TestCase):
 
         process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
-        output, _ = process.communicate(input=input_data.encode(), timeout=2)
+        output, _ = process.communicate(input=input_data.encode(), timeout=10)
         self.assertEqual(output.decode(), expected_output)
 
 
@@ -35,6 +35,11 @@ class TestVSM(unittest.TestCase):
         input_data = 'transmission_gear = "reverse"'
         expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup = True\n'
         self.run_vsm('simple0', input_data, expected_output)
+
+    def test_simple0_delayed(self):
+        input_data = 'transmission_gear = "reverse"'
+        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup = True\n'
+        self.run_vsm('simple0_delay', input_data, expected_output)
 
     def test_simple0_uninteresting(self):
         input_data = 'phone_call = "inactive"'
