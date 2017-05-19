@@ -38,17 +38,28 @@ class Logger(object):
     def __init__(self, pipeout_fd):
         self.pipeout_fd = pipeout_fd
 
-    def i(self, msg, timestamp=False):
+    def i(self, msg, timestamp=True):
         '''
             Log an informative (non-error) message
         '''
         os.write(self.pipeout_fd, self.__prepend_timestamp(msg, timestamp))
 
-    def e(self, msg, timestamp=False):
+    def e(self, msg, timestamp=True):
         '''
             Log an error
         '''
         os.write(self.pipeout_fd, self.__prepend_timestamp(msg, timestamp))
+
+    def signal(self, signal, value):
+        '''
+            Log a signal emission
+        '''
+        # NOTE: the "[SIGNUM]" field is a temporary placeholder for the signal
+        # ID
+        msg_final = '{},{},[SIGNUM],{}\n'.format(get_runtime(), signal,
+                repr(value))
+
+        os.write(self.pipeout_fd, msg_final.encode('UTF-8'))
 
     def __prepend_timestamp(self, msg, timestamp):
         msg_final = msg + '\n'
@@ -165,7 +176,7 @@ class State(object):
 
 
 def send(signal, value):
-    logger.i('{} = {}'.format(signal, value))
+    logger.signal(signal, value)
 
 def delayed_emit(signal, value, delay):
     time.sleep(delay/1000)

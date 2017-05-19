@@ -90,24 +90,27 @@ class TestVSM(unittest.TestCase):
 
             # strip any prepended timestamp, if it exists
             output_final = ''
-            for line in output_string.splitlines(True):
+            # note: this strips any trailing whitespace
+            for line in output_string.splitlines():
                 try:
-                    timestamp, remainder = line.split(': ', 1)
+                    timestamp, remainder = line.split(',', 1)
+                    output_final += remainder
                 except ValueError:
-                    remainder = line
+                    output_final += line
 
-                output_final = output_final + remainder
+                # this re-adds a trailing newline
+                output_final += '\n'
 
             self.assertEqual(output_final , expected_output)
 
     def test_simple0(self):
         input_data = 'transmission_gear = "reverse"'
-        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup = True\n'
+        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup,[SIGNUM],\'True\'\n'
         self.run_vsm('simple0', input_data, expected_output)
 
     def test_simple0_delayed(self):
         input_data = 'transmission_gear = "reverse"'
-        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup = True\n'
+        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup,[SIGNUM],\'True\'\n'
         self.run_vsm('simple0_delay', input_data, expected_output)
 
     def test_simple0_uninteresting(self):
@@ -117,7 +120,7 @@ class TestVSM(unittest.TestCase):
 
     def test_simple2_initial(self):
         input_data = 'damage = true'
-        expected_output = 'State = {\ndamage = True\nmoving = false\n}\ncar.stop = True\n'
+        expected_output = 'State = {\ndamage = True\nmoving = false\n}\ncar.stop,[SIGNUM],\'True\'\n'
         self.run_vsm('simple2', input_data, expected_output)
 
     def test_simple2_initial_uninteresting(self):
@@ -132,20 +135,20 @@ class TestVSM(unittest.TestCase):
 
     def test_simple2_multiple_signals(self):
         input_data = 'moving = false\ndamage = true'
-        expected_output = 'State = {\nmoving = False\n}\nState = {\ndamage = True\nmoving = False\n}\ncar.stop = True\n'
+        expected_output = 'State = {\nmoving = False\n}\nState = {\ndamage = True\nmoving = False\n}\ncar.stop,[SIGNUM],\'True\'\n'
         self.run_vsm('simple2', input_data, expected_output, False)
 
     @unittest.skip("delays not yet implemented")
     def test_delay(self):
         input_data = ''
-        expected_output = 'lights.external.headlights = True\n'
+        expected_output = 'lights.external.headlights,[SIGNUM],\'True\'\n'
         # NOTE: ideally, this would ensure the delay in output
         self.run_vsm('delay', input_data, expected_output, False)
 
     @unittest.skip("exclusive conditions not yet implemented")
     def test_exclusive_conditions(self):
         input_data = 'remote_key.command = "unlock"\nlock_state = true\nremote_key.command = "lock"'
-        expected_output = 'lock_state = False\nhorn = True\n'
+        expected_output = 'lock_state,[SIGNUM],\'False\'\nhorn,[SIGNUM],\'True\'\n'
         self.run_vsm('exclusive_conditions', input_data, expected_output, False)
 
     @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
