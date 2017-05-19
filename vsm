@@ -15,6 +15,7 @@ import argparse
 import yaml
 import ast
 import time
+from ipc.loader import load_plugin, LoaderError
 
 LOGIC_REPLACE = {'||': 'or',
                  '&&': 'and',
@@ -151,9 +152,11 @@ class State(object):
                 pass
 
 
-def emit(signal, value):
+def send(signal, value):
     Log.i('{} = {}'.format(signal, value))
 
+def emit(signal, value):
+    send(signal, value)
 
 def process(state, signal, value):
     '''
@@ -181,9 +184,9 @@ def process(state, signal, value):
     state.got_signal(signal, value)
 
 
-def run(state):
+def receive():
     '''
-        Loop to grab logic from stdin, then spawn a threads for processing
+        Loop to grab logic from stdin
     '''
     for line in sys.stdin:
         line = line.replace(" ", "").strip('\n')
@@ -191,12 +194,29 @@ def run(state):
             # Ignore blank lines
             pass
         if line == "quit":
-            break
+            exit(0)
         elif "=" in line:
             line = line.split("=")
-            process(state, line[0], line[1])
+            return (line[0], line[1])
         else:
-            process(state, line, None)
+            return (line, None)
+
+def run(state):
+    try:
+        while True:
+            message = receive()
+            if message == None:
+                exit(0)
+
+            signal, value = message
+            # 'quit' signal to close VSM endpoint.
+            if signal == 'quit':
+                send('', '')
+                break
+
+            process(state, signal, value)
+    except KeyboardInterrupt:
+        exit(0)
 
 def get_runtime():
     return round(time.perf_counter() * 1000 - start_time_ms)
@@ -209,7 +229,17 @@ if __name__ == "__main__":
                         help='Initial state, yaml file', required=False)
     parser.add_argument('rules', type=str,
                         help='yaml rules configuration')
+    parser.add_argument('--ipc-module', type=str, help='Load IPC module')
     args = parser.parse_args()
+
+    if args.ipc_module:
+        # Load IPC plugin.
+        # This will override the receive/send functions with the plugin version.
+        try:
+            load_plugin('ipc.{}'.format(args.ipc_module))
+        except LoaderError as err:
+            print(err)
+            exit(1)
 
     state = State(args.initial_state, args.rules)
     run(state)
