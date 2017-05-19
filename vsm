@@ -14,6 +14,7 @@ import sys
 import argparse
 import yaml
 import ast
+import time
 
 LOGIC_REPLACE = {'||': 'or',
                  '&&': 'and',
@@ -21,6 +22,34 @@ LOGIC_REPLACE = {'||': 'or',
                  'false': 'False'}
 
 KEYWORDS = ['condition', 'emit']
+
+start_time_ms = 0
+
+class Log(object):
+    '''
+        Utility class for logging messages
+    '''
+
+    @staticmethod
+    def i(msg, timestamp=False):
+        '''
+            Log an informative (non-error) message
+        '''
+        print(Log.__prepend_timestamp(msg, timestamp))
+
+    @staticmethod
+    def e(msg, timestamp=False):
+        '''
+            Log an error
+        '''
+        print(Log.__prepend_timestamp(msg, timestamp), file=sys.stderr)
+
+    @staticmethod
+    def __prepend_timestamp(msg, timestamp):
+        if(not timestamp):
+            return msg
+
+        return '{}: {}'.format(get_runtime(), msg)
 
 class State(object):
     '''
@@ -70,7 +99,7 @@ class State(object):
                     action = ast.parse(action).body[0]
 
                 else:
-                    print("Unhandled keyword {}".format(word))
+                    Log.e("Unhandled keyword {}".format(word))
 
             ifnode = ast.If(condition.value, [action], [])
             ast_module = ast.Module([ifnode])
@@ -123,7 +152,7 @@ class State(object):
 
 
 def emit(signal, value):
-    print('{} = {}'.format(signal, value))
+    Log.i('{} = {}'.format(signal, value))
 
 
 def process(state, signal, value):
@@ -169,8 +198,12 @@ def run(state):
         else:
             process(state, line, None)
 
+def get_runtime():
+    return round(time.perf_counter() * 1000 - start_time_ms)
 
 if __name__ == "__main__":
+    start_time_ms = round(time.perf_counter() * 1000)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--initial-state', type=str,
                         help='Initial state, yaml file', required=False)
