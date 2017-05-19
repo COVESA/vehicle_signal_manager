@@ -28,8 +28,19 @@ class TestVSM(unittest.TestCase):
         process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
         output, _ = process.communicate(input=input_data.encode(), timeout=2)
-        self.assertEqual(output.decode(), expected_output)
+        output_string = output.decode()
 
+        # strip any prepended timestamp, if it exists
+        output_final = ''
+        for line in output_string.splitlines(True):
+            try:
+                timestamp, remainder = line.split(': ', 1)
+            except ValueError:
+                remainder = line
+
+            output_final = output_final + remainder
+
+        self.assertEqual(output_final , expected_output)
 
     def test_simple0(self):
         input_data = 'transmission_gear = "reverse"'
