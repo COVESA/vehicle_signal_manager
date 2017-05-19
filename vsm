@@ -103,6 +103,11 @@ class State(object):
     def got_signal(self, signal, value):
         vars(self.variables)[signal] = value
 
+        print("State = {")
+        for k, v in sorted(vars(self.variables).items()):
+            print("{} = {}".format(k, v))
+        print("}")
+
         # No conditions based on the signal that was emitted,
         # nothing to be done.
         if not signal in self.rules:
