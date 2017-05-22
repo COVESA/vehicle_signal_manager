@@ -12,8 +12,48 @@ from subprocess import Popen, PIPE
 
 RULES_PATH = os.path.abspath(os.path.join('.', 'sample_rules'))
 
+def format_ipc_input(data):
+    return [ (x.strip(), y.strip()) for x, y in \
+             [ elm.split('=') for elm in data.split('\n') ] ]
+
+def format_ipc_output(data):
+    return ('', '') if data == '' \
+        else tuple([ elm.strip() for elm in data.strip().split('=') ])
+
 
 class TestVSM(unittest.TestCase):
+    ipc_module = None
+
+    def setUp(self):
+        # Skip temporarily IPC tests until log and signal output are split.
+        if self.ipc_module == 'zeromq':
+            self.skipTest('IPC tests are not yet supported')
+
+        if self.ipc_module == 'zeromq':
+            self._init_zeromq()
+
+    def _init_zeromq(self):
+        import zmq
+        from ipc.zeromq import SOCKET_ADDR
+        self._zmq_addr = SOCKET_ADDR
+        context = zmq.Context()
+        self._zmq_socket = context.socket(zmq.PAIR)
+        self._zmq_socket.connect(self._zmq_addr)
+
+    def _send(self, signal, value):
+        if self.ipc_module == 'zeromq':
+            self._zmq_socket.send_pyobj((signal, value))
+            return
+
+        raise NotImplemented
+
+    def _receive(self):
+        if self.ipc_module == 'zeromq':
+            return self._zmq_socket.recv_pyobj()
+
+        raise NotImplemented
+
+
     def run_vsm(self, name, input_data, expected_output, use_initial=True):
         conf = os.path.join(RULES_PATH, name + '.yaml')
         initial_state = os.path.join(RULES_PATH, name + '.initial.yaml')
@@ -25,22 +65,40 @@ class TestVSM(unittest.TestCase):
 
         cmd += [conf]
 
-        process = Popen(cmd, stdin=PIPE, stdout=PIPE)
+        if TestVSM.ipc_module:
+            cmd += [ '--ipc-module={}'.format(TestVSM.ipc_module) ]
 
-        output, _ = process.communicate(input=input_data.encode(), timeout=2)
-        output_string = output.decode()
+        if TestVSM.ipc_module == 'zeromq':
+            process = Popen(cmd)
 
-        # strip any prepended timestamp, if it exists
-        output_final = ''
-        for line in output_string.splitlines(True):
-            try:
-                timestamp, remainder = line.split(': ', 1)
-            except ValueError:
-                remainder = line
+            for signal, value in format_ipc_input(input_data):
+                self._send(signal, value)
 
-            output_final = output_final + remainder
+            # Workaround for signals expecting ''
+            if expected_output == '':
+                self._send('quit', '')
 
-        self.assertEqual(output_final , expected_output)
+            output = self._receive()
+            process.terminate()
+
+            self.assertEqual(output, format_ipc_output(expected_output))
+        else:
+            process = Popen(cmd, stdin=PIPE, stdout=PIPE)
+
+            output, _ = process.communicate(input=input_data.encode(), timeout=2)
+            output_string = output.decode()
+
+            # strip any prepended timestamp, if it exists
+            output_final = ''
+            for line in output_string.splitlines(True):
+                try:
+                    timestamp, remainder = line.split(': ', 1)
+                except ValueError:
+                    remainder = line
+
+                output_final = output_final + remainder
+
+            self.assertEqual(output_final , expected_output)
 
     def test_simple0(self):
         input_data = 'transmission_gear = "reverse"'
@@ -93,4 +151,9 @@ class TestVSM(unittest.TestCase):
                 expected_output, False)
 
 if __name__ == '__main__':
-    unittest.main()
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    TestVSM.ipc_module = 'zeromq'
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
+    unittest.TextTestRunner(verbosity=2).run(suite)
