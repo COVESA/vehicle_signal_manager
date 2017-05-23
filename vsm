@@ -27,6 +27,8 @@ LOGIC_REPLACE = {'||': 'or',
 
 KEYWORDS = ['condition', 'emit']
 
+LOG_FILE_PATH_DEFAULT = 'vsm.log'
+
 start_time_ms = 0
 logger = None
 
@@ -42,13 +44,13 @@ class Logger(object):
         '''
             Log an informative (non-error) message
         '''
-        os.write(self.pipeout_fd, self.__prepend_timestamp(msg, timestamp))
+        os.write(self.pipeout_fd, (msg + '\n').encode('UTF-8'))
 
     def e(self, msg, timestamp=True):
         '''
             Log an error
         '''
-        os.write(self.pipeout_fd, self.__prepend_timestamp(msg, timestamp))
+        os.write(self.pipeout_fd, (msg + '\n').encode('UTF-8'))
 
     def signal(self, signal, value):
         '''
@@ -56,18 +58,10 @@ class Logger(object):
         '''
         # NOTE: the "[SIGNUM]" field is a temporary placeholder for the signal
         # ID
-        msg_final = '{},{},[SIGNUM],{}\n'.format(get_runtime(), signal,
+        msg_final = '{},{},[SIGNUM],{}'.format(get_runtime(), signal,
                 repr(value))
 
-        os.write(self.pipeout_fd, msg_final.encode('UTF-8'))
-
-    def __prepend_timestamp(self, msg, timestamp):
-        msg_final = msg + '\n'
-
-        if timestamp:
-            msg_final = '{}: {}\n'.format(get_runtime(), msg)
-
-        return msg_final.encode('UTF-8')
+        print(msg_final)
 
 class State(object):
     '''
@@ -156,10 +150,10 @@ class State(object):
     def got_signal(self, signal, value):
         vars(self.variables)[signal] = value
 
-        print("State = {")
+        logger.i("State = {")
         for k, v in sorted(vars(self.variables).items()):
-            print("{} = {}".format(k, v))
-        print("}")
+            logger.i("{} = {}".format(k, v))
+        logger.i("}")
 
         # No conditions based on the signal that was emitted,
         # nothing to be done.
@@ -210,11 +204,26 @@ def process(state, signal, value):
 
     state.got_signal(signal, value)
 
-def log_processor(pipein_fd):
+def log_processor(pipein_fd, log_file_path):
     pipein = os.fdopen(pipein_fd)
+    log_file = sys.stdout
+
+    if log_file_path == None or log_file_path == '':
+        log_file_path = LOG_FILE_PATH_DEFAULT
+
+    if log_file_path != '-':
+        try:
+            log_file = open(log_file_path, 'w')
+        except Exception as e:
+            log_file.write("failed to open log file '{}': {}\n".format(
+                log_file_path, e))
 
     for line in pipein:
-        sys.stdout.write(line)
+        log_file.write(line)
+        log_file.flush()
+
+    if log_file_path:
+        log_file.close()
 
     pipein.close()
 
@@ -264,26 +273,27 @@ if __name__ == "__main__":
     parser.add_argument('rules', type=str,
                         help='yaml rules configuration')
     parser.add_argument('--ipc-module', type=str, help='Load IPC module')
+    parser.add_argument('--log-file', type=str,
+            help='Write extra (non-signal emission) output to this file')
     args = parser.parse_args()
 
+    # fork separate process to handle logging so we don't block main process
+    pipein_fd, pipeout_fd = os.pipe()
+    if os.fork() == 0:
+        os.close(pipeout_fd)
+        log_processor(pipein_fd, args.log_file)
+    else:
+        os.close(pipein_fd)
+
+    logger = Logger(pipeout_fd)
     if args.ipc_module:
         # Load IPC plugin.
         # This will override the receive/send functions with the plugin version.
         try:
             load_plugin('ipc.{}'.format(args.ipc_module))
         except LoaderError as err:
-            print(err)
+            logger.e(err)
             exit(1)
-
-    # fork separate process to handle logging so we don't block main process
-    pipein_fd, pipeout_fd = os.pipe()
-    if os.fork() == 0:
-        os.close(pipeout_fd)
-        log_processor(pipein_fd)
-    else:
-        os.close(pipein_fd)
-
-    logger = Logger(pipeout_fd)
 
     state = State(args.initial_state, args.rules)
     run(state)

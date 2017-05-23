@@ -60,6 +60,10 @@ class TestVSM(unittest.TestCase):
 
         cmd = ['./vsm' ]
 
+        # direct verbose output (including state dumps) to stdout so the tests
+        # can parse them
+        cmd += ['--log-file=-']
+
         if use_initial and os.path.exists(initial_state):
             cmd += ['--initial-state={}'.format(initial_state)]
 
