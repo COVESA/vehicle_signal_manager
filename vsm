@@ -84,6 +84,46 @@ class State(object):
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
 
+    def handle_emit(self, data, condtion):
+        signal = data["emit"]["signal"]
+        value = data["emit"]["value"]
+
+        if "delay" in data["emit"].keys():
+            action = "threading.Thread(target=delayed_emit, args=( \
+                            \'{}\', \'{}\', {})).start()".format(signal,
+                            value, data["emit"]["delay"])
+        else:
+            action = "emit(\'{}\', \'{}\')".format(signal, value)
+
+        action = ast.parse(action)
+
+        if condtion == True:
+            return action.body[0]
+        else:
+            rule = compile(action, '<string>', 'exec')
+            exec(rule)
+
+    def handle_condition(self, data):
+        condition = data["condition"]
+        condition = ast.parse(condition).body[0]
+
+        action = self.handle_emit(data, True)
+
+        ifnode = ast.If(condition.value, [action], [])
+        ast_module = ast.Module([ifnode])
+
+        ast.fix_missing_locations(ast_module)
+
+        rule = compile(ast_module, '<string>', 'exec')
+        self.add_rule(condition, rule)
+
+    def __parse_items(self, item):
+        keys = list(item.keys())
+        if "condition" in item:
+            self.handle_condition(item)
+        elif "emit" in item:
+            self.handle_emit(item, False)
+
     def parse_rules(self, rules_file):
         '''
             Parse YAML rules for policy manager and return ast code.
@@ -95,37 +135,11 @@ class State(object):
         for key, value in LOGIC_REPLACE.items():
              data = data.replace(key, value).strip()
 
-        data = yaml.load(data)
-
-        # Process rule logic and turn it into AST.
-        for block in data:
-            for word in block:
-                if word == "condition":
-                    condition = block[word]
-                    condition = ast.parse(condition).body[0]
-
-                elif word == "emit":
-                    signal = block[word]["signal"]
-                    value = block[word]["value"]
-
-                    if "delay" in block[word].keys():
-                        action = "threading.Thread(target=delayed_emit, args=( \
-                                    \'{}\', \'{}\', {})).start()".format(signal,
-                                    value, block[word]["delay"])
-                    else:
-                        action = "emit(\'{}\', \'{}\')".format(signal, value)
-                    action = ast.parse(action).body[0]
-
-                else:
-                    logger.e("Unhandled keyword {}".format(word))
-
-            ifnode = ast.If(condition.value, [action], [])
-            ast_module = ast.Module([ifnode])
-
-            ast.fix_missing_locations(ast_module)
-
-            rule = compile(ast_module, '<string>', 'exec')
-            self.add_rule(condition, rule)
+        data = yaml.safe_load(data)
+        # Currently we support only lists in yaml at base level
+        if issubclass(type(data), list):
+            for item in data:
+                self.__parse_items(item)
 
     def add_rule(self, condition, rule):
         tracked_signal = None

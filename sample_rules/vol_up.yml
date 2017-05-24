@@ -1,25 +1,25 @@
 # Turn the volume up for the application that is active
 
 # First emit the switchpack volume up button
-emit:
+- emit:
     signal: switchpack.steering.vol_up
     value: 1
 
 # Set up parallel monitor for each of the applications
-parallel:
+- parallel:
     # monitor signal and state and make a call to the nav app
     - condition: switchpack.steering.vol_up && nav.active == true
       call:
         delay: 100
         function: nav.IncreaseVolume()
 
-    # monitor for phone 
+    # monitor for phone
     - condition: switchpack.steering.vol_up && phone.active == true
       call:
         delay: 100
         function: nav.IncreaseVolume()
 
-    
+
     # monitor for media
     - condition: switchpack.steering.vol_up && media.active == true
       call:
