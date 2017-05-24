@@ -11,9 +11,11 @@
 #  * Shane Fagan <shane.fagan@collabora.com>
 
 import sys
+import os
 import argparse
 import yaml
 import ast
+import threading
 import time
 from ipc.loader import load_plugin, LoaderError
 
@@ -96,7 +98,13 @@ class State(object):
                 elif word == "emit":
                     signal = block[word]["signal"]
                     value = block[word]["value"]
-                    action = "emit(\'{}\', \'{}\')".format(signal, value)
+
+                    if "delay" in block[word].keys():
+                        action = "threading.Thread(target=delayed_emit, args=( \
+                                    \'{}\', \'{}\', {})).start()".format(signal,
+                                    value, block[word]["delay"])
+                    else:
+                        action = "emit(\'{}\', \'{}\')".format(signal, value)
                     action = ast.parse(action).body[0]
 
                 else:
@@ -154,6 +162,10 @@ class State(object):
 
 def send(signal, value):
     Log.i('{} = {}'.format(signal, value))
+
+def delayed_emit(signal, value, delay):
+    time.sleep(delay/1000)
+    emit(signal, value)
 
 def emit(signal, value):
     send(signal, value)
