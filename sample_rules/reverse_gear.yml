@@ -4,12 +4,12 @@
 #
 # We start the process by unconditionally emitting a signal, transmission.gear,
 # set to 'reverse'
-emit:
+- emit:
     signal: transmission.gear
     value: 'reverse'
 
 # We now monitor the incoming signal stream for specific conditions to be met.
-parallel:
+- parallel:
     - condition: transmission.gear == 'reverse'
       # When this monitor's condition (gear in reverse) becomes true, a signal
       # will be emitted to turn the backup light.
@@ -76,7 +76,7 @@ parallel:
               # The monitor, once started, remains active until the parent
               # condition (backup camera active) becomes false.
               stop: 0
-            
+
               # Once the backup radar is active, we then want the backup camera
               # application to be active.
             - condition: ivi.application.back_up_camera.active == true

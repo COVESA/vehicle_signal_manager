@@ -6,13 +6,13 @@
 #
 # We start the process by unconditionally emitting a signal for part of the
 # checked states below
-emit:
+- emit:
     signal: lock_state
     value: true
 
 # the first condition clause to be met will be executed to the exclusion of the
 # others
-exclusive:
+- exclusive:
     # If the vehicle is locked and we unlock it, signal to unlock
     - condition: >
         lock_state == true &&

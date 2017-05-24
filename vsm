@@ -18,6 +18,7 @@ import ast
 import threading
 import time
 from ipc.loader import load_plugin, LoaderError
+import os
 
 LOGIC_REPLACE = {'||': 'or',
                  '&&': 'and',
@@ -26,33 +27,41 @@ LOGIC_REPLACE = {'||': 'or',
 
 KEYWORDS = ['condition', 'emit']
 
-start_time_ms = 0
+LOG_FILE_PATH_DEFAULT = 'vsm.log'
 
-class Log(object):
+start_time_ms = 0
+logger = None
+
+class Logger(object):
     '''
         Utility class for logging messages
     '''
 
-    @staticmethod
-    def i(msg, timestamp=False):
+    def __init__(self, pipeout_fd):
+        self.pipeout_fd = pipeout_fd
+
+    def i(self, msg, timestamp=True):
         '''
             Log an informative (non-error) message
         '''
-        print(Log.__prepend_timestamp(msg, timestamp))
+        os.write(self.pipeout_fd, (msg + '\n').encode('UTF-8'))
 
-    @staticmethod
-    def e(msg, timestamp=False):
+    def e(self, msg, timestamp=True):
         '''
             Log an error
         '''
-        print(Log.__prepend_timestamp(msg, timestamp), file=sys.stderr)
+        os.write(self.pipeout_fd, (msg + '\n').encode('UTF-8'))
 
-    @staticmethod
-    def __prepend_timestamp(msg, timestamp):
-        if(not timestamp):
-            return msg
+    def signal(self, signal, value):
+        '''
+            Log a signal emission
+        '''
+        # NOTE: the "[SIGNUM]" field is a temporary placeholder for the signal
+        # ID
+        msg_final = '{},{},[SIGNUM],{}'.format(get_runtime(), signal,
+                repr(value))
 
-        return '{}: {}'.format(get_runtime(), msg)
+        print(msg_final)
 
 class State(object):
     '''
@@ -75,6 +84,46 @@ class State(object):
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
 
+    def handle_emit(self, data, condtion):
+        signal = data["emit"]["signal"]
+        value = data["emit"]["value"]
+
+        if "delay" in data["emit"].keys():
+            action = "threading.Thread(target=delayed_emit, args=( \
+                            \'{}\', \'{}\', {})).start()".format(signal,
+                            value, data["emit"]["delay"])
+        else:
+            action = "emit(\'{}\', \'{}\')".format(signal, value)
+
+        action = ast.parse(action)
+
+        if condtion == True:
+            return action.body[0]
+        else:
+            rule = compile(action, '<string>', 'exec')
+            exec(rule)
+
+    def handle_condition(self, data):
+        condition = data["condition"]
+        condition = ast.parse(condition).body[0]
+
+        action = self.handle_emit(data, True)
+
+        ifnode = ast.If(condition.value, [action], [])
+        ast_module = ast.Module([ifnode])
+
+        ast.fix_missing_locations(ast_module)
+
+        rule = compile(ast_module, '<string>', 'exec')
+        self.add_rule(condition, rule)
+
+    def __parse_items(self, item):
+        keys = list(item.keys())
+        if "condition" in item:
+            self.handle_condition(item)
+        elif "emit" in item:
+            self.handle_emit(item, False)
+
     def parse_rules(self, rules_file):
         '''
             Parse YAML rules for policy manager and return ast code.
@@ -86,37 +135,11 @@ class State(object):
         for key, value in LOGIC_REPLACE.items():
              data = data.replace(key, value).strip()
 
-        data = yaml.load(data)
-
-        # Process rule logic and turn it into AST.
-        for block in data:
-            for word in block:
-                if word == "condition":
-                    condition = block[word]
-                    condition = ast.parse(condition).body[0]
-
-                elif word == "emit":
-                    signal = block[word]["signal"]
-                    value = block[word]["value"]
-
-                    if "delay" in block[word].keys():
-                        action = "threading.Thread(target=delayed_emit, args=( \
-                                    \'{}\', \'{}\', {})).start()".format(signal,
-                                    value, block[word]["delay"])
-                    else:
-                        action = "emit(\'{}\', \'{}\')".format(signal, value)
-                    action = ast.parse(action).body[0]
-
-                else:
-                    Log.e("Unhandled keyword {}".format(word))
-
-            ifnode = ast.If(condition.value, [action], [])
-            ast_module = ast.Module([ifnode])
-
-            ast.fix_missing_locations(ast_module)
-
-            rule = compile(ast_module, '<string>', 'exec')
-            self.add_rule(condition, rule)
+        data = yaml.safe_load(data)
+        # Currently we support only lists in yaml at base level
+        if issubclass(type(data), list):
+            for item in data:
+                self.__parse_items(item)
 
     def add_rule(self, condition, rule):
         tracked_signal = None
@@ -141,10 +164,10 @@ class State(object):
     def got_signal(self, signal, value):
         vars(self.variables)[signal] = value
 
-        print("State = {")
+        logger.i("State = {")
         for k, v in sorted(vars(self.variables).items()):
-            print("{} = {}".format(k, v))
-        print("}")
+            logger.i("{} = {}".format(k, v))
+        logger.i("}")
 
         # No conditions based on the signal that was emitted,
         # nothing to be done.
@@ -161,7 +184,7 @@ class State(object):
 
 
 def send(signal, value):
-    Log.i('{} = {}'.format(signal, value))
+    logger.signal(signal, value)
 
 def delayed_emit(signal, value, delay):
     time.sleep(delay/1000)
@@ -195,6 +218,28 @@ def process(state, signal, value):
 
     state.got_signal(signal, value)
 
+def log_processor(pipein_fd, log_file_path):
+    pipein = os.fdopen(pipein_fd)
+    log_file = sys.stdout
+
+    if log_file_path == None or log_file_path == '':
+        log_file_path = LOG_FILE_PATH_DEFAULT
+
+    if log_file_path != '-':
+        try:
+            log_file = open(log_file_path, 'w')
+        except Exception as e:
+            log_file.write("failed to open log file '{}': {}\n".format(
+                log_file_path, e))
+
+    for line in pipein:
+        log_file.write(line)
+        log_file.flush()
+
+    if log_file_path:
+        log_file.close()
+
+    pipein.close()
 
 def receive():
     '''
@@ -242,15 +287,26 @@ if __name__ == "__main__":
     parser.add_argument('rules', type=str,
                         help='yaml rules configuration')
     parser.add_argument('--ipc-module', type=str, help='Load IPC module')
+    parser.add_argument('--log-file', type=str,
+            help='Write extra (non-signal emission) output to this file')
     args = parser.parse_args()
 
+    # fork separate process to handle logging so we don't block main process
+    pipein_fd, pipeout_fd = os.pipe()
+    if os.fork() == 0:
+        os.close(pipeout_fd)
+        log_processor(pipein_fd, args.log_file)
+    else:
+        os.close(pipein_fd)
+
+    logger = Logger(pipeout_fd)
     if args.ipc_module:
         # Load IPC plugin.
         # This will override the receive/send functions with the plugin version.
         try:
             load_plugin('ipc.{}'.format(args.ipc_module))
         except LoaderError as err:
-            print(err)
+            logger.e(err)
             exit(1)
 
     state = State(args.initial_state, args.rules)
