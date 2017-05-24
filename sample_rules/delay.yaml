@@ -4,11 +4,11 @@
 # requirement in some jurisdictions and generally safer).
 #
 # We start the process by unconditionally emitting the relevant signal
-emit:
+- emit:
     signal: wipers.front.on
     value: true
 
-parallel:
+- parallel:
     # We now monitor the incoming signal stream for specific conditions to be
     # met.
     - condition: wipers.front.on == true

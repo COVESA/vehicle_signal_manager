@@ -6,12 +6,12 @@
 #
 # We start the process by unconditionally emitting a signal for part of the
 # checked states below
-emit:
+- emit:
     signal: movement.speed
     value: 100
 
 # In parallel, evaluate two sets of conditions to emit two different signals
-parallel:
+- parallel:
     # Check for the condition the driver is approaching but not over the speed
     # required to time travel (in km/h); also check for what should be a
     # corresponding measurement (flux capacitor energy near 1.21 GW)
