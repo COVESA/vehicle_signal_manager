@@ -105,6 +105,11 @@ class TestVSM(unittest.TestCase):
         expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup = True\n'
         self.run_vsm('simple0', input_data, expected_output)
 
+    def test_simple0_delayed(self):
+        input_data = 'transmission_gear = "reverse"'
+        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup = True\n'
+        self.run_vsm('simple0_delay', input_data, expected_output)
+
     def test_simple0_uninteresting(self):
         input_data = 'phone_call = "inactive"'
         expected_output = 'State = {\nphone_call = inactive\n}\n'
