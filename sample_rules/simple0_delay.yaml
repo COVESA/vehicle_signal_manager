@@ -2,4 +2,4 @@
   emit:
     signal: car.backup
     value: true
-    delay: 100
+    delay: 1000
