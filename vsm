@@ -84,7 +84,7 @@ class State(object):
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
 
-    def handle_emit(self, data, condtion):
+    def handle_emit(self, data, condition):
         signal = data["emit"]["signal"]
         value = data["emit"]["value"]
 
@@ -97,7 +97,7 @@ class State(object):
 
         action = ast.parse(action)
 
-        if condtion == True:
+        if condition == True:
             return action.body[0]
         else:
             rule = compile(action, '<string>', 'exec')
