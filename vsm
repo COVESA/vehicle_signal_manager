@@ -299,15 +299,15 @@ if __name__ == "__main__":
     else:
         os.close(pipein_fd)
 
-    logger = Logger(pipeout_fd)
-    if args.ipc_module:
-        # Load IPC plugin.
-        # This will override the receive/send functions with the plugin version.
-        try:
-            load_plugin('ipc.{}'.format(args.ipc_module))
-        except LoaderError as err:
-            logger.e(err)
-            exit(1)
+        logger = Logger(pipeout_fd)
+        if args.ipc_module:
+            # Load IPC plugin.
+            # Override the receive/send functions with the plugin version.
+            try:
+                load_plugin('ipc.{}'.format(args.ipc_module))
+            except LoaderError as err:
+                logger.e(err)
+                exit(1)
 
-    state = State(args.initial_state, args.rules)
-    run(state)
+        state = State(args.initial_state, args.rules)
+        run(state)
