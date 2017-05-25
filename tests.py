@@ -142,23 +142,20 @@ class TestVSM(unittest.TestCase):
         expected_output = 'State = {\nmoving = False\n}\nState = {\ndamage = True\nmoving = False\n}\ncar.stop,[SIGNUM],\'True\'\n'
         self.run_vsm('simple2', input_data, expected_output, False)
 
-    @unittest.skip("delays not yet implemented")
     def test_delay(self):
         input_data = ''
-        expected_output = 'lights.external.headlights,[SIGNUM],\'True\'\n'
+        expected_output = 'wipers.front.on,[SIGNUM],\'True\'\n'
         # NOTE: ideally, this would ensure the delay in output
         self.run_vsm('delay', input_data, expected_output, False)
 
-    @unittest.skip("exclusive conditions not yet implemented")
     def test_exclusive_conditions(self):
-        input_data = 'remote_key.command = "unlock"\nlock_state = true\nremote_key.command = "lock"'
-        expected_output = 'lock_state,[SIGNUM],\'False\'\nhorn,[SIGNUM],\'True\'\n'
+        input_data = 'remote_key = "unlock"\nlock_state = true\nremote_key = "lock"'
+        expected_output = 'State = {\nremote_key = unlock\n}\nState = {\nlock_state = True\nremote_key = unlock\n}\nState = {\nlock_state = True\nremote_key = lock\n}\nlock_state,[SIGNUM],\'True\'\nlock_state,[SIGNUM],\'False\'\nhorn,[SIGNUM],\'True\'\n'
         self.run_vsm('exclusive_conditions', input_data, expected_output, False)
 
-    @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
     def test_subclauses_arithmetic_booleans(self):
         input_data = 'flux_capacitor.energy_generated = 1.1\nmovement.speed = 140'
-        expected_output = 'lights.external.time_travel_imminent\nlights.internal.time_travel_imminent\n'
+        expected_output = 'movement.speed,[SIGNUM],\'100\'\n'
         self.run_vsm('subclauses_arithmetic_booleans', input_data,
                 expected_output, False)
 

@@ -17,15 +17,13 @@ import yaml
 import ast
 import threading
 import time
+import uuid
 from ipc.loader import load_plugin, LoaderError
-import os
 
 LOGIC_REPLACE = {'||': 'or',
                  '&&': 'and',
                  'true': 'True',
                  'false': 'False'}
-
-KEYWORDS = ['condition', 'emit']
 
 LOG_FILE_PATH_DEFAULT = 'vsm.log'
 
@@ -71,6 +69,7 @@ class State(object):
         class VariablesStorage(object):
             pass
         self.variables = VariablesStorage()
+        self.signals = {}
 
         self.rules = {}
         with open(rules) as rules_file:
@@ -84,7 +83,7 @@ class State(object):
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
 
-    def handle_emit(self, data, condtion):
+    def handle_emit(self, data, ret_rule):
         signal = data["emit"]["signal"]
         value = data["emit"]["value"]
 
@@ -92,18 +91,22 @@ class State(object):
             action = "threading.Thread(target=delayed_emit, args=( \
                             \'{}\', \'{}\', {})).start()".format(signal,
                             value, data["emit"]["delay"])
+        elif "start" in data["emit"].keys() and "stop" in data["emit"].keys():
+            action = "threading.Thread(target=monitored_emit, args=( \
+                            \'{}\', \'{}\', {}, {})).start()".format(signal,
+                            value, data["emit"]["start"], data["emit"]["stop"])
         else:
             action = "emit(\'{}\', \'{}\')".format(signal, value)
 
         action = ast.parse(action)
 
-        if condtion == True:
+        if ret_rule == True:
             return action.body[0]
         else:
             rule = compile(action, '<string>', 'exec')
             exec(rule)
 
-    def handle_condition(self, data):
+    def handle_condition(self, data, ret_rule):
         condition = data["condition"]
         condition = ast.parse(condition).body[0]
 
@@ -115,14 +118,58 @@ class State(object):
         ast.fix_missing_locations(ast_module)
 
         rule = compile(ast_module, '<string>', 'exec')
-        self.add_rule(condition, rule)
+        if ret_rule:
+            return [condition, rule]
+        else:
+            self.add_rule(condition, rule)
 
-    def __parse_items(self, item):
-        keys = list(item.keys())
+    def handle_children(self, data, child_type):
+        # Build a dict, the key is the keyword used to decide how they are run
+        # the items and sub items are the various rules and sub rules
+        rules = {child_type:[]}
+        conditions = []
+
+        if child_type == 'sequence':
+            # A little clunky but sorted doesn't work so accessing through the
+            # key is the best way of doing this
+            count = 1
+            for item in data[child_type][count]:
+                rule = self.__parse_items(data[child_type][count], True)
+                if rule != "" and isinstance(rule, list):
+                    rules[child_type].append({count: rule[1]})
+                    conditions.append(rule[0])
+                else:
+                    rules[child_type].append(rule)
+                count = count + 1
+        else:
+            for item in data[child_type]:
+                if child_type == "parallel" or child_type == "exclusive":
+                    rule = self.__parse_items(item, True)
+                    if rule != "" and isinstance(rule, list):
+                        rules[child_type].append(rule[1])
+                        conditions.append(rule[0])
+                    else:
+                        rules[child_type].append(rule)
+
+        return [conditions, rules]
+
+    def __parse_items(self, item, ret_rule):
+        rule = None
+
+        if "parallel" in item:
+            rule = self.handle_children(item, "parallel")
+        if "sequence" in item:
+            rule = self.handle_children(item, "sequence")
+        if "exclusive" in item:
+            rule = self.handle_children(item, "exclusive")
         if "condition" in item:
-            self.handle_condition(item)
+            rule = self.handle_condition(item, ret_rule)
         elif "emit" in item:
-            self.handle_emit(item, False)
+            rule = self.handle_emit(item, ret_rule)
+            if rule != None:
+                rule = compile(rule[1], '<string>', 'exec')
+
+        return rule
 
     def parse_rules(self, rules_file):
         '''
@@ -139,13 +186,11 @@ class State(object):
         # Currently we support only lists in yaml at base level
         if issubclass(type(data), list):
             for item in data:
-                self.__parse_items(item)
+                rule = self.__parse_items(item, False)
+                if rule:
+                    self.add_rules(rule[0], rule[1])
 
-    def add_rule(self, condition, rule):
-        tracked_signal = None
-
-        names = []
-        attributes = []
+    def __get_ast_info(self, condition, names, attributes):
         for node in ast.walk(condition):
             if isinstance(node, ast.Attribute):
                 attributes.append(node.attr)
@@ -156,10 +201,47 @@ class State(object):
                     attributes = []
                 names.append(name)
 
+    def add_rule(self, condition, rule):
+        names = []
+        attributes = []
+
+        self.__get_ast_info(condition, names, attributes)
         for signal_name in names:
             if not signal_name in self.rules:
                 self.rules[signal_name] = []
             self.rules[signal_name].append(rule)
+
+    def add_rules(self, conditions, rules):
+        names = []
+        attributes = []
+
+        if isinstance(conditions, list) and isinstance(rules, dict):
+            for condition in conditions:
+                self.__get_ast_info(condition, names, attributes)
+
+            rule_id = str(uuid.uuid4())
+            self.rules[rule_id] = rules
+            for name in names:
+                if name in self.signals.keys() and isinstance(self.signals[name], list):
+                    self.signals[name].append(rule_id)
+                else:
+                    self.signals[name] = [rule_id]
+
+    def __exec_child_rule(self, rule):
+        key = list(rule.keys())[0]
+        if key == "exclusive" or key == 'parallel' or key == "sequence":
+            for item in rule[key]:
+                if isinstance(item, str):
+                    self.__exec_child_rule(item)
+                else:
+                    try:
+                        if key == 'exclusive' or "sequence":
+                            exec(item, globals(), vars(self.variables))
+                        else:
+                            threading.Thread(target=exec, args=(item, globals(),
+                                                vars(self.variables))).start()
+                    except NameError:
+                        pass
 
     def got_signal(self, signal, value):
         vars(self.variables)[signal] = value
@@ -171,17 +253,21 @@ class State(object):
 
         # No conditions based on the signal that was emitted,
         # nothing to be done.
-        if not signal in self.rules:
+        if not signal in self.rules and not signal in self.signals.keys():
             return
 
-        for rule in self.rules[signal]:
-            try:
-                exec(rule, globals(), vars(self.variables))
-            except NameError:
-                # Names used in rules are not always present
-                # in the state.
-                pass
+        elif signal in self.rules:
+            for rule in self.rules[signal]:
+                try:
+                    exec(rule, globals(), vars(self.variables))
+                except NameError:
+                    # Names used in rules are not always present
+                    # in the state.
+                    pass
 
+        elif signal in self.signals.keys():
+            for item in list(set(self.signals[signal])):
+                self.__exec_child_rule(self.rules[item])
 
 def send(signal, value):
     logger.signal(signal, value)
@@ -189,6 +275,17 @@ def send(signal, value):
 def delayed_emit(signal, value, delay):
     time.sleep(delay/1000)
     emit(signal, value)
+
+def monitored_emit(signal, value, start, stop):
+    current_milli_time = lambda: int(round(time.time() * 1000))
+    start_time = current_milli_time()
+
+    time.sleep(start/1000)
+    while True:
+        emit(signal, value)
+        if current_milli_time()-start_time > stop:
+            break
+        time.sleep(0.1)
 
 def emit(signal, value):
     send(signal, value)
@@ -201,14 +298,13 @@ def process(state, signal, value):
         return (value[0] == '"' or value[0] == "'") and \
             (value[-1] == '"' or value[-1] == "'")
 
-    def is_bool(value):
-        return value == 'true' or value == 'false'
-
     # from str to int or float (if that is needed)
     if is_string(value):
         value = value[1:-1]
-    elif is_bool(value):
-        value = value == 'true' or False
+    elif value.lower() == 'true':
+        value = True
+    elif value.lower() == 'false':
+        value = False
     else:
         if value.isalnum():
             if '.' in value:
@@ -260,6 +356,7 @@ def receive():
 
 def run(state):
     try:
+
         while True:
             message = receive()
             if message == None:
@@ -270,9 +367,14 @@ def run(state):
             if signal == 'quit':
                 send('', '')
                 break
+            elif signal == '':
+                pass
+            else:
+                process(state, signal, value)
 
-            process(state, signal, value)
     except KeyboardInterrupt:
+        exit(0)
+    except IOError:
         exit(0)
 
 def get_runtime():
