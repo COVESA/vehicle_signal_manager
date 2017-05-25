@@ -105,17 +105,29 @@ class State(object):
 
     def handle_condition(self, data):
         condition = data["condition"]
-        condition = ast.parse(condition).body[0]
+        condition_expr = ast.parse(condition).body[0]
 
-        action = self.handle_emit(data, True)
+        action_true_1_body = self.handle_emit(data, True)
 
-        ifnode = ast.If(condition.value, [action], [])
+        action_true_2_code = self.generate_condition_code(condition, True)
+        action_true_2 = ast.parse(action_true_2_code)
+
+        action_false_code = self.generate_condition_code(condition, False)
+        action_false = ast.parse(action_false_code)
+
+        ifnode = ast.If(condition_expr.value,
+                [action_true_1_body, action_true_2.body[0]],
+                [action_false.body[0]])
         ast_module = ast.Module([ifnode])
 
         ast.fix_missing_locations(ast_module)
 
         rule = compile(ast_module, '<string>', 'exec')
-        self.add_rule(condition, rule)
+        self.add_rule(condition_expr, rule)
+
+    def generate_condition_code(self, condition, result):
+        return "logger.i(\"condition: ({}) => {}\")".format(condition,
+                str(result))
 
     def __parse_items(self, item):
         keys = list(item.keys())

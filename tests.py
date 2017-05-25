@@ -112,22 +112,22 @@ class TestVSM(unittest.TestCase):
 
     def test_simple0(self):
         input_data = 'transmission_gear = "reverse"'
-        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup,[SIGNUM],\'True\'\n'
+        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncondition: (transmission_gear == \'reverse\') => True\ncar.backup,[SIGNUM],\'True\'\n'
         self.run_vsm('simple0', input_data, expected_output)
 
     def test_simple0_delayed(self):
         input_data = 'transmission_gear = "reverse"'
-        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncar.backup,[SIGNUM],\'True\'\n'
+        expected_output = 'State = {\ntransmission_gear = reverse\n}\ncondition: (transmission_gear == \'reverse\') => True\ncar.backup,[SIGNUM],\'True\'\n'
         self.run_vsm('simple0_delay', input_data, expected_output)
 
     def test_simple0_uninteresting(self):
         input_data = 'phone_call = "inactive"'
-        expected_output = 'State = {\nphone_call = inactive\n}\n'
+        expected_output = 'State = {\nphone_call = inactive\n}\ncondition: (phone_call == \'active\') => False\n'
         self.run_vsm('simple0', input_data, expected_output, send_quit=True)
 
     def test_simple2_initial(self):
         input_data = 'damage = true'
-        expected_output = 'State = {\ndamage = True\nmoving = false\n}\ncar.stop,[SIGNUM],\'True\'\n'
+        expected_output = 'State = {\ndamage = True\nmoving = false\n}\ncondition: (moving != True and damage == True) => True\ncar.stop,[SIGNUM],\'True\'\n'
         self.run_vsm('simple2', input_data, expected_output)
 
     def test_simple2_initial_uninteresting(self):
@@ -137,12 +137,12 @@ class TestVSM(unittest.TestCase):
 
     def test_simple2_modify_uninteresting(self):
         input_data = 'moving = true\ndamage = true'
-        expected_output = 'State = {\nmoving = True\n}\nState = {\ndamage = True\nmoving = True\n}\n'
+        expected_output = 'State = {\nmoving = True\n}\ncondition: (moving != True and damage == True) => False\nState = {\ndamage = True\nmoving = True\n}\ncondition: (moving != True and damage == True) => False\n'
         self.run_vsm('simple2', input_data, expected_output, send_quit=True)
 
     def test_simple2_multiple_signals(self):
         input_data = 'moving = false\ndamage = true'
-        expected_output = 'State = {\nmoving = False\n}\nState = {\ndamage = True\nmoving = False\n}\ncar.stop,[SIGNUM],\'True\'\n'
+        expected_output = 'State = {\nmoving = False\n}\nState = {\ndamage = True\nmoving = False\n}\ncondition: (moving != True and damage == True) => True\ncar.stop,[SIGNUM],\'True\'\n'
         self.run_vsm('simple2', input_data, expected_output, False)
 
     @unittest.skip("delays not yet implemented")
