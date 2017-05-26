@@ -29,6 +29,8 @@ KEYWORDS = ['condition', 'emit']
 
 LOG_FILE_PATH_DEFAULT = 'vsm.log'
 
+LOG_CAT_CONDITION_CHECKS = 'condition-checks'
+
 start_time_ms = 0
 logger = None
 
@@ -67,10 +69,11 @@ class State(object):
     '''
         Class to handle states
     '''
-    def __init__(self, initial_state, rules):
+    def __init__(self, initial_state, rules, log_categories):
         class VariablesStorage(object):
             pass
         self.variables = VariablesStorage()
+        self.log_categories = log_categories
 
         self.rules = {}
         with open(rules) as rules_file:
@@ -83,6 +86,7 @@ class State(object):
                 for item in data:
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
+
 
     def handle_emit(self, data, condition):
         signal = data["emit"]["signal"]
@@ -108,16 +112,20 @@ class State(object):
         condition_expr = ast.parse(condition).body[0]
 
         action_true_1_body = self.handle_emit(data, True)
+        actions_true = [action_true_1_body]
+        actions_false = []
 
-        action_true_2_code = self.generate_condition_code(condition, True)
-        action_true_2 = ast.parse(action_true_2_code)
+        if self.log_categories[LOG_CAT_CONDITION_CHECKS]:
+            action_true_2_code = self.generate_condition_code(condition, True)
+            action_true_2 = ast.parse(action_true_2_code)
 
-        action_false_code = self.generate_condition_code(condition, False)
-        action_false = ast.parse(action_false_code)
+            action_false_code = self.generate_condition_code(condition, False)
+            action_false = ast.parse(action_false_code)
 
-        ifnode = ast.If(condition_expr.value,
-                [action_true_1_body, action_true_2.body[0]],
-                [action_false.body[0]])
+            actions_true.append(action_true_2.body[0])
+            actions_false.append(action_false.body[0])
+
+        ifnode = ast.If(condition_expr.value, actions_true, actions_false)
         ast_module = ast.Module([ifnode])
 
         ast.fix_missing_locations(ast_module)
@@ -301,7 +309,13 @@ if __name__ == "__main__":
     parser.add_argument('--ipc-module', type=str, help='Load IPC module')
     parser.add_argument('--log-file', type=str,
             help='Write extra (non-signal emission) output to this file')
+    parser.add_argument('--no-log-condition-checks',
+            dest='log_condition_checks', action='store_false',
+            help='Do not log condition checks (default: log them)')
+    parser.set_defaults(log_condition_checks=True)
     args = parser.parse_args()
+
+    log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
 
     # fork separate process to handle logging so we don't block main process
     pipein_fd, pipeout_fd = os.pipe()
@@ -321,5 +335,5 @@ if __name__ == "__main__":
                 logger.e(err)
                 exit(1)
 
-        state = State(args.initial_state, args.rules)
+        state = State(args.initial_state, args.rules, log_categories)
         run(state)
