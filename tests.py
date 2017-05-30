@@ -11,25 +11,19 @@ from subprocess import Popen, PIPE
 
 
 RULES_PATH = os.path.abspath(os.path.join('.', 'sample_rules'))
+SIGNAL_FORMAT = '{},[SIGNUM],\'{}\'\n'
+VSM_LOG_FILE = 'vsm-tests.log'
 
 def format_ipc_input(data):
     return [ (x.strip(), y.strip()) for x, y in \
              [ elm.split('=') for elm in data.split('\n') ] ]
-
-def format_ipc_output(data):
-    return ('', '') if data == '' \
-        else tuple([ elm.strip() for elm in data.strip().split('=') ])
 
 
 class TestVSM(unittest.TestCase):
     ipc_module = None
 
     def setUp(self):
-        # Skip temporarily IPC tests until log and signal output are split.
-        if self.ipc_module == 'zeromq':
-            self.skipTest('IPC tests are not yet supported')
-
-        if self.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == 'zeromq':
             self._init_zeromq()
 
     def _init_zeromq(self):
@@ -41,28 +35,31 @@ class TestVSM(unittest.TestCase):
         self._zmq_socket.connect(self._zmq_addr)
 
     def _send(self, signal, value):
-        if self.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == 'zeromq':
             self._zmq_socket.send_pyobj((signal, value))
             return
 
         raise NotImplemented
 
     def _receive(self):
-        if self.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == 'zeromq':
             return self._zmq_socket.recv_pyobj()
 
         raise NotImplemented
 
 
-    def run_vsm(self, name, input_data, expected_output, use_initial=True):
+    def run_vsm(self, name, input_data, expected_output,
+                use_initial=True, send_quit=False):
         conf = os.path.join(RULES_PATH, name + '.yaml')
         initial_state = os.path.join(RULES_PATH, name + '.initial.yaml')
 
         cmd = ['./vsm' ]
 
-        # direct verbose output (including state dumps) to stdout so the tests
-        # can parse them
-        cmd += ['--log-file=-']
+        # Read from the log file for the zeromq tests, otherwise direct
+        # verbose output (including state dumps) to stdout so the tests
+        # can parse them.
+        log_file = VSM_LOG_FILE if TestVSM.ipc_module == 'zeromq' else '-'
+        cmd += [ '--log-file={}'.format(log_file) ]
 
         if use_initial and os.path.exists(initial_state):
             cmd += ['--initial-state={}'.format(initial_state)]
@@ -78,14 +75,20 @@ class TestVSM(unittest.TestCase):
             for signal, value in format_ipc_input(input_data):
                 self._send(signal, value)
 
-            # Workaround for signals expecting ''
-            if expected_output == '':
+            # Send 'quit' for those tests with no signal reply, otherwise
+            # they will be stuck on 'receive'.
+            if send_quit:
                 self._send('quit', '')
 
-            output = self._receive()
+            sig, val = self._receive()
             process.terminate()
 
-            self.assertEqual(output, format_ipc_output(expected_output))
+            # Read state dump from log file.
+            with open(VSM_LOG_FILE) as f:
+                state_output = f.read()
+
+            signal_output = '' if (sig == '') else SIGNAL_FORMAT.format(sig, val)
+            output_final = state_output + signal_output
         else:
             process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
@@ -105,7 +108,7 @@ class TestVSM(unittest.TestCase):
                 # this re-adds a trailing newline
                 output_final += '\n'
 
-            self.assertEqual(output_final , expected_output)
+        self.assertEqual(output_final , expected_output)
 
     def test_simple0(self):
         input_data = 'transmission_gear = "reverse"'
@@ -120,7 +123,7 @@ class TestVSM(unittest.TestCase):
     def test_simple0_uninteresting(self):
         input_data = 'phone_call = "inactive"'
         expected_output = 'State = {\nphone_call = inactive\n}\n'
-        self.run_vsm('simple0', input_data, expected_output)
+        self.run_vsm('simple0', input_data, expected_output, send_quit=True)
 
     def test_simple2_initial(self):
         input_data = 'damage = true'
@@ -130,12 +133,12 @@ class TestVSM(unittest.TestCase):
     def test_simple2_initial_uninteresting(self):
         input_data = 'moving = false'
         expected_output = 'State = {\nmoving = False\n}\n'
-        self.run_vsm('simple2', input_data, expected_output)
+        self.run_vsm('simple2', input_data, expected_output, send_quit=True)
 
     def test_simple2_modify_uninteresting(self):
         input_data = 'moving = true\ndamage = true'
         expected_output = 'State = {\nmoving = True\n}\nState = {\ndamage = True\nmoving = True\n}\n'
-        self.run_vsm('simple2', input_data, expected_output)
+        self.run_vsm('simple2', input_data, expected_output, send_quit=True)
 
     def test_simple2_multiple_signals(self):
         input_data = 'moving = false\ndamage = true'
