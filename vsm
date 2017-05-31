@@ -33,6 +33,7 @@ LOG_CAT_CONDITION_CHECKS = 'condition-checks'
 
 SIGNAL_PREFIX_OUTGOING = '<'
 SIGNAL_PREFIX_INCOMING = '>'
+SIGNAL_PREFIX_DELIM = ' '
 
 start_time_ms = 0
 logger = None
@@ -215,6 +216,67 @@ class State(object):
             logger.i("{} = {}".format(k, v))
         logger.i("}")
 
+class LogReplayer(object):
+    '''
+        Class to enact log file replaying (signals only)
+    '''
+
+    signals = []
+
+    def __init__(self, state, replay_log):
+        with open(replay_log) as f:
+            content = f.readlines()
+            for line in content:
+                self.__parse_replay_log_line(line)
+
+        for signal in self.signals:
+            remaining_delay_ms = min(signal.time_ms - get_runtime(), 0)
+
+            if signal.direction == self.Signal.DIRECTION_IN:
+                receive_record(signal.name, signal.value, remaining_delay_ms,
+                        state)
+            if signal.direction == self.Signal.DIRECTION_OUT:
+                delayed_emit(signal.name, signal.value, remaining_delay_ms,
+                    state)
+
+    def __parse_replay_log_line(self, line):
+        if SIGNAL_PREFIX_DELIM not in line:
+            return
+
+        prefix, remainder = line.split(SIGNAL_PREFIX_DELIM, 1)
+        direction = None
+        if prefix == SIGNAL_PREFIX_INCOMING:
+            direction = self.Signal.DIRECTION_IN
+
+        if prefix == SIGNAL_PREFIX_OUTGOING:
+            direction = self.Signal.DIRECTION_OUT
+
+        if direction:
+            try:
+                time_ms, name, signum, value = remainder.split(',')
+                time_ms = int(time_ms)
+                # eval() the value to effectively reverse the excessive repr()
+                # which will be applied before printing this value (which would
+                # result in values like "'True'\n" instead of 'True'
+                value = eval(value)
+                self.signals.append(self.Signal(direction, time_ms, name,
+                    value))
+            except ValueError as err:
+                logger.e('failed to parse line (invalid number of elements): ' +
+                        '{}; line was:\n{}'.format(err, line))
+
+                return
+
+    class Signal:
+        DIRECTION_OUT = 'out'
+        DIRECTION_IN = 'in'
+
+        def __init__(self, direction, time_ms, name, value):
+            self.direction = direction
+            self.time_ms = time_ms
+            self.name = name
+            self.value = value
+
 def show(signal, value, indicator):
     '''
         Show signal emission/reception
@@ -334,10 +396,17 @@ if __name__ == "__main__":
     parser.add_argument('--no-log-condition-checks',
             dest='log_condition_checks', action='store_false',
             help='Do not log condition checks (default: log them)')
+    parser.add_argument('--replay-log-file', type=str,
+            help='Use a log file to replay signal emission in real or scaled ' +
+            'time')
     parser.set_defaults(log_condition_checks=True)
     args = parser.parse_args()
 
     log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
+
+    log_replayer = None
+    if args.replay_log_file:
+        log_replayer = LogReplayer(args.replay_log_file)
 
     # fork separate process to handle logging so we don't block main process
     pipein_fd, pipeout_fd = os.pipe()

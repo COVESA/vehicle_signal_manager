@@ -12,6 +12,7 @@ from subprocess import Popen, PIPE
 
 
 RULES_PATH = os.path.abspath(os.path.join('.', 'sample_rules'))
+LOGS_PATH = os.path.abspath(os.path.join('.', 'sample_logs'))
 SIGNAL_FORMAT = '{},[SIGNUM],\'{}\'\n'
 VSM_LOG_FILE = 'vsm-tests.log'
 
@@ -72,7 +73,8 @@ class TestVSM(unittest.TestCase):
 
 
     def run_vsm(self, name, input_data, expected_output,
-                use_initial=True, send_quit=False):
+                use_initial=True, send_quit=False, replay_case=None,
+                wait_time_ms=0):
         conf = os.path.join(RULES_PATH, name + '.yaml')
         initial_state = os.path.join(RULES_PATH, name + '.initial.yaml')
 
@@ -86,6 +88,12 @@ class TestVSM(unittest.TestCase):
             cmd += ['--initial-state={}'.format(initial_state)]
 
         cmd += [conf]
+
+        if replay_case:
+            replay_file = os.path.join(LOGS_PATH, replay_case + '.log')
+
+            if os.path.exists(replay_file):
+                cmd += ['--replay-log-file={}'.format(replay_file)]
 
         if TestVSM.ipc_module:
             cmd += [ '--ipc-module={}'.format(TestVSM.ipc_module) ]
@@ -113,7 +121,12 @@ class TestVSM(unittest.TestCase):
         else:
             process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
-            output, _ = process.communicate(input=input_data.encode(), timeout=2)
+            timeout_s = 2
+            if wait_time_ms > 0:
+                timeout_s = wait_time_ms / 1000
+
+            output, _ = process.communicate(input=input_data.encode(),
+                    timeout=timeout_s)
             cmd_output = output.decode()
 
             process_output = _remove_timestamp(cmd_output)
@@ -235,6 +248,22 @@ damage,[SIGNUM],'true'
 car.stop,[SIGNUM],'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n', False)
+
+    def test_simple0_log_replay(self):
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = ''
+        expected_output = '''
+phone_call,[SIGNUM],'active'
+State = {
+phone_call = active
+}
+car.stop,[SIGNUM],'True'
+car.stop,[SIGNUM],'True'
+        '''
+        self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
+                replay_case='simple0-replay', wait_time_ms=5000)
 
     @unittest.skip("delays not yet implemented")
     def test_delay(self):
