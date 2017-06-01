@@ -69,8 +69,7 @@
           # other, but a 'sequence:' keyword greatly eases readability
           sequence:
             # We first want the backup radar to become active.
-            - 1:
-              condition: radar.backup.active == true
+            - condition: radar.backup.active == true
               # Give the backup radar 200 msec to become active
               start: 200
 
@@ -80,8 +79,7 @@
 
               # Once the backup radar is active, we then want the backup camera
               # application to be active.
-            - 2:
-              condition: ivi.application.back_up_camera.active == true
+            - condition: ivi.application.back_up_camera.active == true
               # Give the backup app 100 ms to become active
               start: 100
 
