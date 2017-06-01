@@ -297,9 +297,9 @@ lights.external.headlights,[SIGNUM],'True'
 
     @unittest.skip("exclusive conditions not yet implemented")
     def test_exclusive_conditions(self):
-        input_data = 'remote_key.command = "unlock"\nlock_state = true\nremote_key.command = "lock"'
+        input_data = 'remote.key.command = "unlock"\nlock.state = true\nremote.key.command = "lock"'
         expected_output = '''
-lock_state,[SIGNUM],'False'
+lock.state,[SIGNUM],'False'
 horn,[SIGNUM],'True'
         '''
         self.run_vsm('exclusive_conditions', input_data, expected_output.strip() + '\n', False)
