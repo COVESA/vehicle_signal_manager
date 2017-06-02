@@ -19,7 +19,8 @@ import threading
 import time
 import json
 from ipc.loader import load_plugin, LoaderError
-
+import os
+import uuid
 
 LOGIC_REPLACE = {'||': 'or',
                  '&&': 'and',
@@ -39,9 +40,25 @@ REPLAY_RATE_MAX = 10000
 
 NODE_CONDITION = 'condition'
 NODE_EMIT = 'emit'
+NODE_START = 'start'
+NODE_STOP = 'stop'
+NODE_PARALLEL = 'parallel'
+# a special name for the rules document root node
+NODE_ROOT = 'root'
+# a special node to group YAML map elements together which otherwise would not
+# maintain their grouping in a tree
+NODE_BLOCK = 'block'
+
+# these keywords wrap one or more conditions into a block where:
+# * parallel:  all matching conditions will be executed
+WRAPPER_KEYWORDS = (NODE_PARALLEL)
 
 start_time_ms = 0
 logger = None
+config_tree = None
+# NOTE: this is global because variables can't be passed by reference in parsed
+# code so we can't encapsulate it
+node_refs = {}
 
 
 def _format_signal_msg(signal, value, indicator):
@@ -131,6 +148,7 @@ class State(object):
         self.log_categories = log_categories
 
         self.rules = {}
+
         with open(rules) as rules_file:
             self.parse_rules(rules_file)
 
@@ -142,8 +160,7 @@ class State(object):
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
 
-
-    def handle_emit(self, data, condition):
+    def handle_emit(self, data, parent):
         signal = data[NODE_EMIT]["signal"]
         value = data[NODE_EMIT]["value"]
 
@@ -154,15 +171,13 @@ class State(object):
         else:
             action = "emit(\'{}\', \'{}\')".format(signal, value)
 
-        action = ast.parse(action)
+        ast_node = ast.parse(action)
 
-        if condition == True:
-            return action.body[0]
-        else:
-            rule = compile(action, '<string>', 'exec')
-            exec(rule)
+        parent.add_child(TreeNode(NODE_EMIT, ast_node))
 
-    def handle_condition(self, data):
+        return ast_node
+
+    def handle_condition(self, data, parent):
         orig_condition = data[NODE_CONDITION]
         # Handle XOR operator (if it is found)
         if orig_condition.find('^^') >= 0:
@@ -181,15 +196,37 @@ class State(object):
         eval_condition = self._undot_identifiers(condition, parser.identifiers)
         eval_condition_expr = ast.parse(eval_condition).body[0]
 
-        action_true_1_body = self.handle_emit(data, True)
+        start_time_ms = -1
+        stop_time_ms = -1
+        if NODE_START in data or NODE_STOP in data:
+            if NODE_START not in data:
+                logger.e(
+                        "'{}' keyword has no corresponding '{}' keyword".format(
+                            NODE_STOP, NODE_START))
+            elif NODE_STOP not in data:
+                logger.e(
+                        "'{}' keyword has no corresponding '{}' keyword".format(
+                            NODE_START, NODE_STOP))
+            else:
+                start_time_ms = data[NODE_START]
+                stop_time_ms = data[NODE_STOP]
+
+        condition_node = TreeNode(NODE_CONDITION, condition_expr,
+                start=start_time_ms, stop=stop_time_ms)
+        parent.add_child(condition_node)
+
+        action_true_1_module = self.handle_emit(data, parent)
+        action_true_1_body = action_true_1_module.body[0]
         actions_true = [action_true_1_body]
         actions_false = []
 
         if self.log_categories[LOG_CAT_CONDITION_CHECKS]:
-            action_true_2_code = self.generate_condition_code(orig_condition, True)
+            action_true_2_code = self.generate_condition_code(orig_condition,
+                    True, condition_node)
             action_true_2 = ast.parse(action_true_2_code)
 
-            action_false_code = self.generate_condition_code(orig_condition, False)
+            action_false_code = self.generate_condition_code(orig_condition,
+                    False, condition_node)
             action_false = ast.parse(action_false_code)
 
             actions_true.append(action_true_2.body[0])
@@ -201,18 +238,72 @@ class State(object):
         ast.fix_missing_locations(ast_module)
 
         rule = compile(ast_module, '<string>', 'exec')
-        self.add_rule(parser.identifiers, rule)
 
-    def generate_condition_code(self, condition, result):
-        return "logger.i(\"condition: ({}) => {}\")".format(condition,
-                str(result))
+        return [condition_expr, rule, parser.identifiers]
 
-    def __parse_items(self, item):
-        keys = list(item.keys())
+    def handle_children(self, data, child_type, parent):
+        # Build a dict, the key is the keyword used to decide how they are run
+        # the items and sub items are the various rules and sub rules
+        rules = {child_type:[]}
+        conditions = []
+
+        # wrapper keywords (which this method handles) can only have list items
+        # as direct children
+        if issubclass(type(data[child_type]), list):
+            for item in data[child_type]:
+                wrapper_node = TreeNode(child_type, None)
+                parent.add_child(wrapper_node)
+
+                block_node = TreeNode(NODE_BLOCK, None)
+                wrapper_node.add_child(block_node)
+
+                rule = self.__parse_items(item, block_node)
+                if rule != "" and isinstance(rule, list):
+                    # conditions to evaluate
+                    conditions.append(rule[0])
+
+                    # code to execute if conditions are met
+                    rules[child_type].append(rule[1])
+        else:
+            logger.e(child_type + " block contains non-list item as direct "
+                "child")
+
+        return [conditions, rules]
+
+    # NOTE: this is static as variables can't be passed by reference in parsed
+    # code so we can't depend on the `self` variable
+    @staticmethod
+    def condition_changed(condition, result, parent_ref):
+        logger.i("condition: ({}) => {}".format(condition, str(result)))
+
+        parent_node = node_refs[parent_ref]
+        parent_node.notify_condition(result)
+
+    def generate_condition_code(self, condition, result, parent):
+        parent_ref = repr(parent)
+        node_refs[parent_ref] = parent
+
+        return "State.condition_changed({}, {}, \'{}\')".format(repr(condition),
+                result, parent_ref)
+
+    def __parse_items(self, item, parent):
+        conditions_rules = None
+
+        if NODE_PARALLEL in item:
+            conditions_rules = self.handle_children(item, NODE_PARALLEL, parent)
         if NODE_CONDITION in item:
-            self.handle_condition(item)
+            condition, rule, identifiers = self.handle_condition(item, parent)
+            self.add_rule(identifiers, rule)
         elif NODE_EMIT in item:
-            self.handle_emit(item, False)
+            module = self.handle_emit(item, parent)
+            if module != None:
+                rule = compile(module, '<string>', 'exec')
+
+            if rule != None:
+                exec(rule)
+
+        if conditions_rules:
+            return conditions_rules
 
     def parse_rules(self, rules_file):
         '''
@@ -226,10 +317,17 @@ class State(object):
              data = data.replace(key, value).strip()
 
         data = yaml.safe_load(data)
+
         # Currently we support only lists in yaml at base level
         if issubclass(type(data), list):
             for item in data:
-                self.__parse_items(item)
+                # this empty node serves to group its child(ren) together just
+                # as the list item in the YAML file groups its child(ren)
+                # together
+                block_node = TreeNode(NODE_BLOCK, None)
+                config_tree.add_child(block_node)
+
+                rules = self.__parse_items(item, block_node)
 
     def add_rule(self, identifiers, rule):
         for signal_name in identifiers:
@@ -245,13 +343,15 @@ class State(object):
         if not signal in self.rules:
             return
 
-        for rule in self.rules[signal]:
-            try:
-                exec(rule, globals(), self._undot_variables(vars(self.variables)))
-            except NameError:
-                # Names used in rules are not always present
-                # in the state.
-                pass
+        elif signal in self.rules:
+            for rule in self.rules[signal]:
+                try:
+                    exec(rule, globals(),
+                            self._undot_variables(vars(self.variables)))
+                except NameError:
+                    # Names used in rules are not always present
+                    # in the state.
+                    pass
 
     def got_signal_record(self, signal, value):
         vars(self.variables)[signal] = value
@@ -481,15 +581,25 @@ class TreeNode:
     def notify_condition(self, state):
         start_max_ms = self.monitor_init_time_ms + self.start_time_ms
         stop_min_ms = self.monitor_init_time_ms + self.stop_time_ms
+        runtime = get_runtime()
+
         if state:
-            # if a monitor is active and we're beyond the 'start' time, don't
-            # let the node's condition_met change from False to True so our
+            # only allow the node's condition_met change from False to True if
+            # we're before the 'start' time and a monitor is not active so our
             # thread can catch the failure without a race condition
-            if (not self.start_timer and not self.stop_timer) \
-                    or not get_runtime() > start_time_ms:
+            if runtime < start_max_ms or \
+                    (not self.start_timer and not self.stop_timer):
                 self.condition_met = True
         else:
             self.condition_met = False
+
+            if (runtime >= start_max_ms and runtime < stop_min_ms) and \
+                    (self.start_timer or self.stop_timer):
+                self._monitor_completed(self.condition_met,
+                        "subcondition not maintained between 'start' time of " \
+                                "{}ms and 'stop' time of {}ms".format(
+                            self.start_time_ms, self.stop_time_ms))
+
 
         for subcondition in self.find_subconditions():
             subcondition.notify_ancestor_condition(self.condition_met)
@@ -510,8 +620,8 @@ class TreeNode:
     def start_timeout_func(self):
         if not self.condition_met:
             self._monitor_completed(self.condition_met,
-                    "condition not met by 'stop' time of {}ms".format(
-                        self.stop_time_ms))
+                    "condition not met by 'start' time of {}ms".format(
+                        self.start_time_ms))
 
     def stop_timeout_func(self):
         self._monitor_completed(True, "")
@@ -695,6 +805,8 @@ if __name__ == "__main__":
             except LoaderError as err:
                 logger.e(err)
                 exit(1)
+
+        config_tree = TreeNode(NODE_ROOT, None)
 
         state = State(args.initial_state, args.rules, log_categories)
 

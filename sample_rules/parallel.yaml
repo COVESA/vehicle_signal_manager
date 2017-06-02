@@ -1,0 +1,14 @@
+%YAML 1.2
+---
+# Describe some parallel conditions where potentially multiple conditional
+# blocks may be executed
+- parallel:
+    - condition: wipers == true
+      emit:
+          signal: lights
+          value: 'on'
+
+    - condition: transmission_gear == 'reverse'
+      emit:
+          signal: reverse
+          value: true

@@ -1,0 +1,39 @@
+# We start the process by unconditionally emitting a signal, transmission.gear,
+# set to 'reverse'
+- emit:
+    signal: transmission.gear
+    value: 'reverse'
+
+# We now monitor the incoming signal stream for specific conditions to be met.
+- condition: transmission.gear == 'reverse'
+  # When this monitor's condition (gear in reverse) becomes true, a signal
+  # will be emitted to turn the backup light.
+  emit:
+    signal: lights.external.backup
+    value: true
+
+  # wrap the monitored condition in a block; since it's the only entry, any
+  # keyword would behave the same as "parallel" here
+  parallel:
+
+    # We want to see the backup camera being active within 100 msec of the
+    # vehicle being put in reverse.
+    #
+    # This monitor will be active from 'start' msec after it becomes
+    # active, or when the parent condition becomes false.
+    - condition: camera.backup.active == true
+
+      # How many msec do we wait after parent condition becomes true
+      # (gear = reverse) until we require our condition (backup camera
+      # active) to also be true.
+      start: 200
+
+      # How many msec after activation do we keep the monitor active?
+      # The monitor condition has to remain true for 'stop' milliseconds
+      # after the monitor is started. If those criteria are not fulfilled,
+      # an error will be logged
+      stop: 1000
+
+      emit:
+        signal: camera.backup.activated
+        value: true
