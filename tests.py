@@ -6,6 +6,7 @@
 # Authors: Shane Fagan - shane.fagan@collabora.com
 
 import os
+import time
 import unittest
 from subprocess import Popen, PIPE
 
@@ -17,6 +18,21 @@ VSM_LOG_FILE = 'vsm-tests.log'
 def format_ipc_input(data):
     return [ (x.strip(), y.strip()) for x, y in \
              [ elm.split('=') for elm in data.split('\n') ] ]
+
+def _remove_timestamp(output_string):
+    # strip any prepended timestamp, if it exists
+    output = ''
+    for line in output_string.splitlines():
+        try:
+            timestamp, remainder = line.split(',', 1)
+            output += remainder
+        except ValueError:
+            output += line
+
+        # this re-adds a trailing newline
+        output += '\n'
+
+    return output
 
 
 class TestVSM(unittest.TestCase):
@@ -55,11 +71,9 @@ class TestVSM(unittest.TestCase):
 
         cmd = ['./vsm' ]
 
-        # Read from the log file for the zeromq tests, otherwise direct
-        # verbose output (including state dumps) to stdout so the tests
+        # Direct verbose output (including state dumps) to log file so the tests
         # can parse them.
-        log_file = VSM_LOG_FILE if TestVSM.ipc_module == 'zeromq' else '-'
-        cmd += [ '--log-file={}'.format(log_file) ]
+        cmd += [ '--log-file={}'.format(VSM_LOG_FILE) ]
 
         if use_initial and os.path.exists(initial_state):
             cmd += ['--initial-state={}'.format(initial_state)]
@@ -72,8 +86,11 @@ class TestVSM(unittest.TestCase):
         if TestVSM.ipc_module == 'zeromq':
             process = Popen(cmd)
 
+            process_output = ''
             for signal, value in format_ipc_input(input_data):
                 self._send(signal, value)
+                # Record sent signal directly from the test.
+                process_output += SIGNAL_FORMAT.format(signal, value)
 
             # Send 'quit' for those tests with no signal reply, otherwise
             # they will be stuck on 'receive'.
@@ -81,42 +98,39 @@ class TestVSM(unittest.TestCase):
                 self._send('quit', '')
 
             sig, val = self._receive()
+            # Give some time for the logger to write all the output.
+            time.sleep(0.01)
             process.terminate()
 
-            # Read state dump from log file.
-            with open(VSM_LOG_FILE) as f:
-                state_output = f.read()
-
-            signal_output = '' if (sig == '') else SIGNAL_FORMAT.format(sig, val)
-            output_final = state_output + signal_output
+            process_output += '' if (sig == '') else SIGNAL_FORMAT.format(sig, val)
         else:
             process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
             output, _ = process.communicate(input=input_data.encode(), timeout=2)
-            output_string = output.decode()
+            cmd_output = output.decode()
 
-            # strip any prepended timestamp, if it exists
-            output_final = ''
-            # note: this strips any trailing whitespace
-            for line in output_string.splitlines():
-                try:
-                    timestamp, remainder = line.split(',', 1)
-                    output_final += remainder
-                except ValueError:
-                    output_final += line
+            process_output = _remove_timestamp(cmd_output)
 
-                # this re-adds a trailing newline
-                output_final += '\n'
+        # Read state dump from log file.
+        with open(VSM_LOG_FILE) as f:
+            state_output = f.read()
+
+        log_output = _remove_timestamp(state_output)
+        output_final = log_output + process_output
 
         self.assertEqual(output_final , expected_output)
+
 
     def test_simple0(self):
         input_data = 'transmission_gear = "reverse"'
         expected_output = '''
+transmission_gear,[SIGNUM],'reverse'
 State = {
 transmission_gear = reverse
 }
+car.backup,[SIGNUM],'True'
 condition: (transmission_gear == 'reverse') => True
+transmission_gear,[SIGNUM],'"reverse"'
 car.backup,[SIGNUM],'True'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n')
@@ -124,10 +138,13 @@ car.backup,[SIGNUM],'True'
     def test_simple0_delayed(self):
         input_data = 'transmission_gear = "reverse"'
         expected_output = '''
+transmission_gear,[SIGNUM],'reverse'
 State = {
 transmission_gear = reverse
 }
 condition: (transmission_gear == 'reverse') => True
+car.backup,[SIGNUM],'True'
+transmission_gear,[SIGNUM],'"reverse"'
 car.backup,[SIGNUM],'True'
         '''
         self.run_vsm('simple0_delay', input_data, expected_output.strip() + '\n')
@@ -135,10 +152,12 @@ car.backup,[SIGNUM],'True'
     def test_simple0_uninteresting(self):
         input_data = 'phone_call = "inactive"'
         expected_output = '''
+phone_call,[SIGNUM],'inactive'
 State = {
 phone_call = inactive
 }
 condition: (phone_call == 'active') => False
+phone_call,[SIGNUM],'"inactive"'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
                 send_quit=True)
@@ -146,11 +165,14 @@ condition: (phone_call == 'active') => False
     def test_simple2_initial(self):
         input_data = 'damage = true'
         expected_output = '''
+damage,[SIGNUM],True
 State = {
 damage = True
 moving = false
 }
+car.stop,[SIGNUM],'True'
 condition: (moving != True and damage == True) => True
+damage,[SIGNUM],'true'
 car.stop,[SIGNUM],'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
@@ -158,9 +180,11 @@ car.stop,[SIGNUM],'True'
     def test_simple2_initial_uninteresting(self):
         input_data = 'moving = false'
         expected_output = '''
+moving,[SIGNUM],False
 State = {
 moving = False
 }
+moving,[SIGNUM],'false'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
                 send_quit=True)
@@ -168,15 +192,19 @@ moving = False
     def test_simple2_modify_uninteresting(self):
         input_data = 'moving = true\ndamage = true'
         expected_output = '''
+moving,[SIGNUM],True
 State = {
 moving = True
 }
 condition: (moving != True and damage == True) => False
+damage,[SIGNUM],True
 State = {
 damage = True
 moving = True
 }
 condition: (moving != True and damage == True) => False
+moving,[SIGNUM],'true'
+damage,[SIGNUM],'true'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
                 send_quit=True)
@@ -184,14 +212,19 @@ condition: (moving != True and damage == True) => False
     def test_simple2_multiple_signals(self):
         input_data = 'moving = false\ndamage = true'
         expected_output = '''
+moving,[SIGNUM],False
 State = {
 moving = False
 }
+damage,[SIGNUM],True
 State = {
 damage = True
 moving = False
 }
+car.stop,[SIGNUM],'True'
 condition: (moving != True and damage == True) => True
+moving,[SIGNUM],'false'
+damage,[SIGNUM],'true'
 car.stop,[SIGNUM],'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n', False)
