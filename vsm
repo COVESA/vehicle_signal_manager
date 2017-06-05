@@ -34,6 +34,13 @@ LOG_CAT_CONDITION_CHECKS = 'condition-checks'
 start_time_ms = 0
 logger = None
 
+
+def _format_signal_msg(signal, value, indicator):
+    # NOTE: the "[SIGNUM]" field is a temporary placeholder for the signal ID
+    return '{} {},{},[SIGNUM],{}'.format(indicator, get_runtime(),
+                                         signal, repr(value))
+
+
 class Logger(object):
     '''
         Utility class for logging messages
@@ -54,16 +61,13 @@ class Logger(object):
         '''
         os.write(self.pipeout_fd, (msg + '\n').encode('UTF-8'))
 
-    def signal(self, signal, value):
+    def signal(self, signal, value, indicator):
         '''
-            Log a signal emission
+            Log signal emission/reception
         '''
-        # NOTE: the "[SIGNUM]" field is a temporary placeholder for the signal
-        # ID
-        msg_final = '{},{},[SIGNUM],{}'.format(get_runtime(), signal,
-                repr(value))
+        msg = _format_signal_msg(signal, value, indicator)
+        os.write(self.pipeout_fd, (msg + '\n').encode('UTF-8'))
 
-        print(msg_final)
 
 class State(object):
     '''
@@ -184,6 +188,9 @@ class State(object):
     def got_signal(self, signal, value):
         vars(self.variables)[signal] = value
 
+        # Record received signal in logs.
+        logger.signal(signal, value, '>')
+
         logger.i("State = {")
         for k, v in sorted(vars(self.variables).items()):
             logger.i("{} = {}".format(k, v))
@@ -202,15 +209,22 @@ class State(object):
                 # in the state.
                 pass
 
+def show(signal, value, indicator):
+    '''
+        Show signal emission/reception
+    '''
+    print(_format_signal_msg(signal, value, indicator))
 
 def send(signal, value):
-    logger.signal(signal, value)
+    show(signal, value, '<')
 
 def delayed_emit(signal, value, delay):
     time.sleep(delay/1000)
     emit(signal, value)
 
 def emit(signal, value):
+    # Record sent signal in logs.
+    logger.signal(signal, value, '<')
     send(signal, value)
 
 def process(state, signal, value):
@@ -274,8 +288,10 @@ def receive():
             exit(0)
         elif "=" in line:
             line = line.split("=")
+            show(line[0], line[1], '>')
             return (line[0], line[1])
         else:
+            show(line, None, '>')
             return (line, None)
 
 def run(state):
