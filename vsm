@@ -31,6 +31,9 @@ LOG_FILE_PATH_DEFAULT = 'vsm.log'
 
 LOG_CAT_CONDITION_CHECKS = 'condition-checks'
 
+SIGNAL_PREFIX_OUTGOING = '<'
+SIGNAL_PREFIX_INCOMING = '>'
+
 start_time_ms = 0
 logger = None
 
@@ -189,7 +192,7 @@ class State(object):
         vars(self.variables)[signal] = value
 
         # Record received signal in logs.
-        logger.signal(signal, value, '>')
+        logger.signal(signal, value, SIGNAL_PREFIX_INCOMING)
 
         logger.i("State = {")
         for k, v in sorted(vars(self.variables).items()):
@@ -216,7 +219,7 @@ def show(signal, value, indicator):
     print(_format_signal_msg(signal, value, indicator))
 
 def send(signal, value):
-    show(signal, value, '<')
+    show(signal, value, SIGNAL_PREFIX_OUTGOING)
 
 def delayed_emit(signal, value, delay):
     time.sleep(delay/1000)
@@ -224,7 +227,7 @@ def delayed_emit(signal, value, delay):
 
 def emit(signal, value):
     # Record sent signal in logs.
-    logger.signal(signal, value, '<')
+    logger.signal(signal, value, SIGNAL_PREFIX_OUTGOING)
     send(signal, value)
 
 def process(state, signal, value):
@@ -288,10 +291,10 @@ def receive():
             exit(0)
         elif "=" in line:
             line = line.split("=")
-            show(line[0], line[1], '>')
+            show(line[0], line[1], SIGNAL_PREFIX_INCOMING)
             return (line[0], line[1])
         else:
-            show(line, None, '>')
+            show(line, None, SIGNAL_PREFIX_INCOMING)
             return (line, None)
 
 def run(state):
