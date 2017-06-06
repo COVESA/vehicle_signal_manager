@@ -35,6 +35,9 @@ SIGNAL_PREFIX_OUTGOING = '<'
 SIGNAL_PREFIX_INCOMING = '>'
 SIGNAL_PREFIX_DELIM = ' '
 
+REPLAY_RATE_MIN = 1
+REPLAY_RATE_MAX = 10000
+
 start_time_ms = 0
 logger = None
 
@@ -223,21 +226,26 @@ class LogReplayer(object):
 
     signals = []
 
-    def __init__(self, state, replay_log):
+    def __init__(self, state, replay_log, replay_rate):
         with open(replay_log) as f:
             content = f.readlines()
             for line in content:
                 self.__parse_replay_log_line(line)
 
         for signal in self.signals:
-            remaining_delay_ms = min(signal.time_ms - get_runtime(), 0)
+            # by default, don't adjust time scale (ie, 100%)
+            scaled_delay_ms = signal.time_ms
+            if replay_rate:
+                scaled_delay_ms = signal.time_ms / (replay_rate / 100)
+
+            remaining_delay_ms = max(scaled_delay_ms - get_runtime(), 0)
 
             if signal.direction == self.Signal.DIRECTION_IN:
-                receive_record(signal.name, signal.value, remaining_delay_ms,
-                        state)
+                delayed_got_signal(signal.name, signal.value,
+                        remaining_delay_ms, state)
             if signal.direction == self.Signal.DIRECTION_OUT:
                 delayed_emit(signal.name, signal.value, remaining_delay_ms,
-                    state)
+                        state)
 
     def __parse_replay_log_line(self, line):
         if SIGNAL_PREFIX_DELIM not in line:
@@ -286,7 +294,9 @@ def show(signal, value, indicator):
 def send(signal, value):
     show(signal, value, SIGNAL_PREFIX_OUTGOING)
 
-def delayed_emit(signal, value, delay):
+# this includes an unused state parameter so it matches the signature of
+# delayed_got_signal() for log replay purposes
+def delayed_emit(signal, value, delay, state=None):
     time.sleep(delay/1000)
     emit(signal, value)
 
@@ -294,6 +304,11 @@ def emit(signal, value):
     # Record sent signal in logs.
     logger.signal(signal, value, SIGNAL_PREFIX_OUTGOING)
     send(signal, value)
+
+def delayed_got_signal(signal, value, delay, state):
+    time.sleep(delay/1000)
+    show(signal, value, SIGNAL_PREFIX_INCOMING)
+    state.got_signal_record(signal, value)
 
 def process(state, signal, value):
     '''
@@ -399,14 +414,24 @@ if __name__ == "__main__":
     parser.add_argument('--replay-log-file', type=str,
             help='Use a log file to replay signal emission in real or scaled ' +
             'time')
+    parser.add_argument('--replay-rate', type=float,
+            help='The rate at which to play back the replay log. This value ' +
+            'is a percentage of originally-recorded timing, specified as a ' +
+            'decimal between ' + str(REPLAY_RATE_MIN) + ' and ' +
+            str(REPLAY_RATE_MAX) + '. A value of 20 signifies playback at ' +
+            '20%% of the original rate (ie, it will take 5 times as long to ' +
+            'complete playback vs 100%%)')
     parser.set_defaults(log_condition_checks=True)
     args = parser.parse_args()
 
     log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
 
-    log_replayer = None
-    if args.replay_log_file:
-        log_replayer = LogReplayer(args.replay_log_file)
+    if args.replay_rate and \
+            (args.replay_rate < REPLAY_RATE_MIN or \
+                    args.replay_rate > REPLAY_RATE_MAX):
+        print('Replay rate must be between {} and {}, inclusive'.format(
+            REPLAY_RATE_MIN, REPLAY_RATE_MAX), file=sys.stderr)
+        exit(1)
 
     # fork separate process to handle logging so we don't block main process
     pipein_fd, pipeout_fd = os.pipe()
@@ -427,4 +452,10 @@ if __name__ == "__main__":
                 exit(1)
 
         state = State(args.initial_state, args.rules, log_categories)
+
+        log_replayer = None
+        if args.replay_log_file:
+            log_replayer = LogReplayer(state, args.replay_log_file,
+                    args.replay_rate)
+
         run(state)

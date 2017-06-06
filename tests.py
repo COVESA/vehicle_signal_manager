@@ -260,6 +260,7 @@ State = {
 phone_call = active
 }
 car.stop,[SIGNUM],'True'
+phone_call,[SIGNUM],'active'
 car.stop,[SIGNUM],'True'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
