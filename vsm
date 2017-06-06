@@ -189,15 +189,7 @@ class State(object):
             self.rules[signal_name].append(rule)
 
     def got_signal(self, signal, value):
-        vars(self.variables)[signal] = value
-
-        # Record received signal in logs.
-        logger.signal(signal, value, SIGNAL_PREFIX_INCOMING)
-
-        logger.i("State = {")
-        for k, v in sorted(vars(self.variables).items()):
-            logger.i("{} = {}".format(k, v))
-        logger.i("}")
+        self.got_signal_record(signal, value)
 
         # No conditions based on the signal that was emitted,
         # nothing to be done.
@@ -211,6 +203,17 @@ class State(object):
                 # Names used in rules are not always present
                 # in the state.
                 pass
+
+    def got_signal_record(self, signal, value):
+        vars(self.variables)[signal] = value
+
+        # Record received signal in logs.
+        logger.signal(signal, value, SIGNAL_PREFIX_INCOMING)
+
+        logger.i("State = {")
+        for k, v in sorted(vars(self.variables).items()):
+            logger.i("{} = {}".format(k, v))
+        logger.i("}")
 
 def show(signal, value, indicator):
     '''
