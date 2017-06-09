@@ -25,6 +25,9 @@ def connect():
     socket = context.socket(zmq.PAIR)
     socket.bind(SOCKET_ADDR)
 
+def close():
+    socket.close()
+
 
 def send(signal, value):
     # Send Python tuple: (Signal ID, Signal Value).
