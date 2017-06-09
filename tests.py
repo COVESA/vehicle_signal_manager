@@ -42,6 +42,10 @@ class TestVSM(unittest.TestCase):
         if TestVSM.ipc_module == 'zeromq':
             self._init_zeromq()
 
+    def tearDown(self):
+        if TestVSM.ipc_module == 'zeromq':
+            self._tear_down_zeromq()
+
     def _init_zeromq(self):
         import zmq
         from ipc.zeromq import SOCKET_ADDR
@@ -49,6 +53,9 @@ class TestVSM(unittest.TestCase):
         context = zmq.Context()
         self._zmq_socket = context.socket(zmq.PAIR)
         self._zmq_socket.connect(self._zmq_addr)
+
+    def _tear_down_zeromq(self):
+        self._zmq_socket.close()
 
     def _send(self, signal, value):
         if TestVSM.ipc_module == 'zeromq':
