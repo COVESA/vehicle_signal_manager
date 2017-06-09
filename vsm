@@ -453,9 +453,7 @@ if __name__ == "__main__":
 
         state = State(args.initial_state, args.rules, log_categories)
 
-        log_replayer = None
         if args.replay_log_file:
-            log_replayer = LogReplayer(state, args.replay_log_file,
-                    args.replay_rate)
+            LogReplayer(state, args.replay_log_file, args.replay_rate)
 
         run(state)
