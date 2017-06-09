@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+#
+#  Copyright (C) 2017, Jaguar Land Rover
+#
+#  This program is licensed under the terms and conditions of the
+#  Mozilla Public License, version 2.0.  The full text of the 
+#  Mozilla Public License is at https://www.mozilla.org/MPL/2.0/
+#
+#  Author:
+#     Luis Araujo <luis.araujo@collabora.co.uk>
+
+import re
+import argparse
+
+SIGNAL_MSG_PATTERN = '^(?P<direction>[<|>]) (?P<time>[\d\.]+),(?P<signal>[\w\.]+,(\[SIGNUM\]|\d+),[\w\'\"]+)$'
+
+signal_pattern = re.compile(SIGNAL_MSG_PATTERN)
+
+
+def run(args):
+    file1 = args.LOG_FILE1
+    file2 = args.LOG_FILE2
+
+    print_sep = False
+    def _print_diff(signalnum, filename, linenum, line, header=True):
+        nonlocal print_sep
+
+        if header:
+            if print_sep:
+                print()
+            print('Signal', signalnum)
+
+        print('{}:{}:'.format(filename, linenum), line)
+        print_sep = True
+
+    with open(file1) as f1, open(file2) as f2:
+        signal_count = 0
+        i = 0
+        lines2 =  f2.readlines()
+        lines2_length = len(lines2)
+
+        line1_count = line2_count = 0
+
+        for line1 in f1.readlines():
+            line1_count += 1
+            line1_s = line1.strip()
+
+            if len(line1_s) == 0:
+                continue
+
+            line1_match = signal_pattern.match(line1_s)
+            if not line1_match:
+                continue
+
+            signal_count += 1
+
+            while i < lines2_length:
+                line2_s = lines2[i].strip()
+                line2_count += 1
+                i += 1
+
+                if len(line2_s) == 0:
+                    continue
+
+                line2_match = signal_pattern.match(line2_s)
+                if line2_match:
+                    notime_line1 = '{} {}'.format(line1_match.group('direction'),
+                                                  line1_match.group('signal'))
+                    notime_line2 = '{} {}'.format(line2_match.group('direction'),
+                                                  line2_match.group('signal'))
+
+                    if args.ignore_time:
+                        cmp_line1 = notime_line1
+                        cmp_line2 = notime_line2
+                    else:
+                        if args.time_deviation:
+                            time1 = line1_match.group('time')
+                            time2 = line2_match.group('time')
+
+                            deviate = abs(float(time1) - float(time2)) > \
+                                      args.time_deviation
+
+                            if not deviate and (notime_line1 == notime_line2):
+                                break
+
+                        cmp_line1 = line1_s
+                        cmp_line2 = line2_s
+
+                    if cmp_line1 != cmp_line2:
+                        _print_diff(signal_count, file1, line1_count, line1_s)
+                        _print_diff(signal_count, file2, line2_count, line2_s, False)
+
+                    break
+            else:
+                # Remaining lines for File 1 (if any).
+                _print_diff(signal_count, file1, line1_count, line1_s)
+
+        # Remaining lines for File 2 (if any).
+        while i < lines2_length:
+            line2_s = lines2[i].strip()
+            line2_count += 1
+            i += 1
+
+            if len(line2_s) == 0:
+                continue
+
+            line2_match = signal_pattern.match(line2_s)
+            if line2_match:
+                signal_count += 1
+                _print_diff(signal_count, file2, line2_count, line2_s)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('LOG_FILE1', type=str, help="Log file 1")
+    parser.add_argument('LOG_FILE2', type=str, help="Log file 2")
+    parser.add_argument('-i', '--ignore-time', action='store_true',
+                        help='Ignore timestamps')
+    parser.add_argument('-t', '--time-deviation', type=float,
+                        help='Time deviation specified as a decimal number in '
+                        'milliseconds (ms)')
+
+    args = parser.parse_args()
+
+    run(args)
