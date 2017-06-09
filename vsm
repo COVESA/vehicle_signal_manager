@@ -17,8 +17,9 @@ import yaml
 import ast
 import threading
 import time
+import json
 from ipc.loader import load_plugin, LoaderError
-import os
+
 
 LOGIC_REPLACE = {'||': 'or',
                  '&&': 'and',
@@ -75,6 +76,36 @@ class Logger(object):
         msg = _format_signal_msg(signal, value, indicator)
         os.write(self.pipeout_fd, (msg + '\n').encode('UTF-8'))
 
+class Catapult(Logger):
+
+    def __init__(self, pipeout_fd):
+        super().__init__(pipeout_fd)
+        self.pid = os.getpid()
+
+        # Open the JSON Array file
+        os.write(self.pipeout_fd, '[\n'.encode('UTF-8'))
+
+    def i(self, msg, timestamp=True):
+        pass
+
+    def e(self, msg, timestamp=True):
+        pass
+
+    def signal(self, signal, value, indicator):
+        '''
+            Log signal emission/reception using the catapult format
+        '''
+        # A JSON object represents a catapult trace event
+        sigtype = 'incoming' if indicator == SIGNAL_PREFIX_INCOMING else 'outgoing'
+        event = {
+            "name": signal,
+            "pid": self.pid,
+            "ts": (get_runtime() * 1000),
+            "cat": "signal,{}".format(sigtype),
+            "ph": "i",
+            "args": { "value": value }
+        }
+        os.write(self.pipeout_fd, (json.dumps(event) + ',\n').encode('UTF-8'))
 
 class State(object):
     '''
@@ -422,6 +453,8 @@ if __name__ == "__main__":
             '20%% of the original rate (ie, it will take 5 times as long to ' +
             'complete playback vs 100%%)')
     parser.set_defaults(log_condition_checks=True)
+    parser.add_argument('--log-format', choices=['catapult'],
+                        help='Write log file in specified format')
     args = parser.parse_args()
 
     log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
@@ -441,7 +474,11 @@ if __name__ == "__main__":
     else:
         os.close(pipein_fd)
 
-        logger = Logger(pipeout_fd)
+        if args.log_format == 'catapult':
+            logger = Catapult(pipeout_fd)
+        else:
+            logger = Logger(pipeout_fd)
+
         if args.ipc_module:
             # Load IPC plugin.
             # Override the receive/send functions with the plugin version.
