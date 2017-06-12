@@ -1,0 +1,4 @@
+- condition: phone_call == 'active' ^^ speed > 50
+  emit:
+    signal: car.stop
+    value: true

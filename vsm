@@ -48,6 +48,18 @@ def _format_signal_msg(signal, value, indicator):
     return '{} {},{},[SIGNUM],{}'.format(indicator, get_runtime(),
                                          signal, repr(value))
 
+def _handle_xor_condition(condition):
+    '''
+        Group within parentheses sub-clauses of XOR expressions and replace
+        its operator (^^) by the not equality operator (!=)
+    '''
+    try:
+        lhs, rhs = condition.split('^^')
+    except ValueError:
+        return condition
+
+    return "({}) != ({})".format(lhs.strip(), rhs.strip())
+
 
 class Logger(object):
     '''
@@ -150,7 +162,12 @@ class State(object):
             exec(rule)
 
     def handle_condition(self, data):
-        condition = data["condition"]
+        # Handle XOR operator (if it is found)
+        if data["condition"].find('^^') >= 0:
+            condition = _handle_xor_condition(data["condition"])
+        else:
+            condition = data["condition"]
+
         condition_expr = ast.parse(condition).body[0]
 
         action_true_1_body = self.handle_emit(data, True)
