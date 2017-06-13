@@ -266,6 +266,26 @@ car.stop,[SIGNUM],'True'
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
                 replay_case='simple0-replay', wait_time_ms=5000)
 
+    def test_simple3_xor_condition(self):
+        input_data = 'phone_call = "active"\nspeed = 5'
+        expected_output = '''
+phone_call,[SIGNUM],'active'
+State = {
+phone_call = active
+}
+speed,[SIGNUM],5
+State = {
+phone_call = active
+speed = 5
+}
+car.stop,[SIGNUM],'True'
+condition: ((phone_call == 'active') != (speed > 50)) => True
+phone_call,[SIGNUM],'"active"'
+speed,[SIGNUM],'5'
+car.stop,[SIGNUM],'True'
+        '''
+        self.run_vsm('simple3', input_data, expected_output.strip() + '\n')
+
     @unittest.skip("delays not yet implemented")
     def test_delay(self):
         input_data = ''
