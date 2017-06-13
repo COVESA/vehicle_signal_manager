@@ -397,7 +397,7 @@ def process(state, signal, value):
         Handle the emitting of signals and adding values to state
     '''
     def is_string(value):
-        if len(value) <= 2:
+        if not isinstance(value, str) or len(value) <= 2:
             return False
         return (value[0] == '"' and value[-1] == '"') or \
             (value[0] == "'" and value[-1] == "'")
