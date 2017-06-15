@@ -162,12 +162,15 @@ class State(object):
             exec(rule)
 
     def handle_condition(self, data):
+        orig_condition = data["condition"]
         # Handle XOR operator (if it is found)
-        if data["condition"].find('^^') >= 0:
-            condition = _handle_xor_condition(data["condition"])
+        if orig_condition.find('^^') >= 0:
+            condition = _handle_xor_condition(orig_condition)
         else:
-            condition = data["condition"]
+            condition = orig_condition
 
+        # Fix all variable names in condition.
+        condition = self._fix_variable_name(condition)
         condition_expr = ast.parse(condition).body[0]
 
         action_true_1_body = self.handle_emit(data, True)
@@ -175,10 +178,10 @@ class State(object):
         actions_false = []
 
         if self.log_categories[LOG_CAT_CONDITION_CHECKS]:
-            action_true_2_code = self.generate_condition_code(condition, True)
+            action_true_2_code = self.generate_condition_code(orig_condition, True)
             action_true_2 = ast.parse(action_true_2_code)
 
-            action_false_code = self.generate_condition_code(condition, False)
+            action_false_code = self.generate_condition_code(orig_condition, False)
             action_false = ast.parse(action_false_code)
 
             actions_true.append(action_true_2.body[0])
@@ -245,12 +248,13 @@ class State(object):
 
         # No conditions based on the signal that was emitted,
         # nothing to be done.
+        signal = self._fix_variable_name(signal)
         if not signal in self.rules:
             return
 
         for rule in self.rules[signal]:
             try:
-                exec(rule, globals(), vars(self.variables))
+                exec(rule, globals(), self._fix_variables(vars(self.variables)))
             except NameError:
                 # Names used in rules are not always present
                 # in the state.
@@ -266,6 +270,14 @@ class State(object):
         for k, v in sorted(vars(self.variables).items()):
             logger.i("{} = {}".format(k, v))
         logger.i("}")
+
+    def _fix_variables(self, variables):
+        return { self._fix_variable_name(k): v for k, v in variables.items() }
+
+    def _fix_variable_name(self, variable):
+        # Replace '.' with '_' for identifiers (signals, attributes), so they
+        # can be correctly interpreted by Python as variables.
+        return variable.replace('.', '_')
 
 class LogReplayer(object):
     '''
