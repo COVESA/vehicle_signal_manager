@@ -279,7 +279,7 @@ phone_call = active
 speed = 5
 }
 car.stop,[SIGNUM],'True'
-condition: ((phone_call == 'active') != (speed > 50)) => True
+condition: (phone_call == 'active' ^^ speed > 50) => True
 phone_call,[SIGNUM],'"active"'
 speed,[SIGNUM],'5'
 car.stop,[SIGNUM],'True'
