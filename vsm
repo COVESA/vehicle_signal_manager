@@ -221,21 +221,10 @@ class State(object):
                 self.__parse_items(item)
 
     def add_rule(self, condition, rule):
-        tracked_signal = None
+        parser = ParseIdentifiers()
+        parser.visit(condition)
 
-        names = []
-        attributes = []
-        for node in ast.walk(condition):
-            if isinstance(node, ast.Attribute):
-                attributes.append(node.attr)
-            if isinstance(node, ast.Name):
-                name = node.id
-                if attributes:
-                    name = '.'.join(reversed(attributes + [name]))
-                    attributes = []
-                names.append(name)
-
-        for signal_name in names:
+        for signal_name in parser.identifiers:
             if not signal_name in self.rules:
                 self.rules[signal_name] = []
             self.rules[signal_name].append(rule)
@@ -266,6 +255,33 @@ class State(object):
         for k, v in sorted(vars(self.variables).items()):
             logger.i("{} = {}".format(k, v))
         logger.i("}")
+
+class ParseIdentifiers(ast.NodeVisitor):
+    '''
+        Class to parse identifiers (signals and attributes names)
+    '''
+
+    def __init__(self):
+        self.identifiers = []
+        self._attributes = []
+
+    def visit_Name(self, node):
+        def make_identifier(node_id):
+            return '.'.join(reversed(self._attributes + [node.id]))
+
+        if self._attributes:
+            # If a name is found with attributes available, build the identifier
+            # and reset the attributes list.
+            self.identifiers.append(make_identifier(node.id))
+            self._attributes = []
+        else:
+            self.identifiers.append(node.id)
+
+        super().generic_visit(node)
+
+    def visit_Attribute(self, node):
+        self._attributes.append(node.attr)
+        super().generic_visit(node)
 
 class LogReplayer(object):
     '''
