@@ -363,23 +363,31 @@ def process(state, signal, value):
         Handle the emitting of signals and adding values to state
     '''
     def is_string(value):
-        return (value[0] == '"' or value[0] == "'") and \
-            (value[-1] == '"' or value[-1] == "'")
+        if len(value) <= 2:
+            return False
+        return (value[0] == '"' and value[-1] == '"') or \
+            (value[0] == "'" and value[-1] == "'")
 
     def is_bool(value):
         return value == 'true' or value == 'false'
 
-    # from str to int or float (if that is needed)
-    if is_string(value):
-        value = value[1:-1]
-    elif is_bool(value):
-        value = value == 'true' or False
-    else:
-        if value.isalnum():
-            if '.' in value:
-                value = float(value)
-            else:
-                value = int(value)
+    # Check and convert value to the types: string, bool, float or int
+    try:
+        if value == None:
+            raise ValueError
+        if is_string(value):
+            value = value[1:-1]
+        elif is_bool(value):
+            value = value == 'true' or False
+        elif value.find('.') >= 0:
+            value = float(value)
+        elif value.isnumeric():
+            value = int(value)
+        else:
+            raise ValueError
+    except ValueError:
+        logger.e('incorrect value: {}'.format(value))
+        return
 
     state.got_signal(signal, value)
 
@@ -414,7 +422,7 @@ def receive():
         line = line.replace(" ", "").strip('\n')
         if line == "":
             # Ignore blank lines
-            pass
+            continue
         if line == "quit":
             exit(0)
         elif "=" in line:
