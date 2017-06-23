@@ -162,35 +162,45 @@ class State(object):
             exec(rule)
 
     def handle_condition(self, data):
+        orig_condition = data["condition"]
         # Handle XOR operator (if it is found)
-        if data["condition"].find('^^') >= 0:
-            condition = _handle_xor_condition(data["condition"])
+        if orig_condition.find('^^') >= 0:
+            condition = _handle_xor_condition(orig_condition)
         else:
-            condition = data["condition"]
+            condition = orig_condition
 
         condition_expr = ast.parse(condition).body[0]
+
+        # Parse identifiers (variables).
+        parser = ParseIdentifiers()
+        parser.visit(condition_expr)
+
+        # Replace dot (.) by underscore (_) in the condition identifiers so they
+        # can be correctly interpreted like Python variables.
+        eval_condition = self._undot_identifiers(condition, parser.identifiers)
+        eval_condition_expr = ast.parse(eval_condition).body[0]
 
         action_true_1_body = self.handle_emit(data, True)
         actions_true = [action_true_1_body]
         actions_false = []
 
         if self.log_categories[LOG_CAT_CONDITION_CHECKS]:
-            action_true_2_code = self.generate_condition_code(condition, True)
+            action_true_2_code = self.generate_condition_code(orig_condition, True)
             action_true_2 = ast.parse(action_true_2_code)
 
-            action_false_code = self.generate_condition_code(condition, False)
+            action_false_code = self.generate_condition_code(orig_condition, False)
             action_false = ast.parse(action_false_code)
 
             actions_true.append(action_true_2.body[0])
             actions_false.append(action_false.body[0])
 
-        ifnode = ast.If(condition_expr.value, actions_true, actions_false)
+        ifnode = ast.If(eval_condition_expr.value, actions_true, actions_false)
         ast_module = ast.Module([ifnode])
 
         ast.fix_missing_locations(ast_module)
 
         rule = compile(ast_module, '<string>', 'exec')
-        self.add_rule(condition_expr, rule)
+        self.add_rule(parser.identifiers, rule)
 
     def generate_condition_code(self, condition, result):
         return "logger.i(\"condition: ({}) => {}\")".format(condition,
@@ -220,22 +230,8 @@ class State(object):
             for item in data:
                 self.__parse_items(item)
 
-    def add_rule(self, condition, rule):
-        tracked_signal = None
-
-        names = []
-        attributes = []
-        for node in ast.walk(condition):
-            if isinstance(node, ast.Attribute):
-                attributes.append(node.attr)
-            if isinstance(node, ast.Name):
-                name = node.id
-                if attributes:
-                    name = '.'.join(reversed(attributes + [name]))
-                    attributes = []
-                names.append(name)
-
-        for signal_name in names:
+    def add_rule(self, identifiers, rule):
+        for signal_name in identifiers:
             if not signal_name in self.rules:
                 self.rules[signal_name] = []
             self.rules[signal_name].append(rule)
@@ -250,7 +246,7 @@ class State(object):
 
         for rule in self.rules[signal]:
             try:
-                exec(rule, globals(), vars(self.variables))
+                exec(rule, globals(), self._undot_variables(vars(self.variables)))
             except NameError:
                 # Names used in rules are not always present
                 # in the state.
@@ -266,6 +262,44 @@ class State(object):
         for k, v in sorted(vars(self.variables).items()):
             logger.i("{} = {}".format(k, v))
         logger.i("}")
+
+    def _undot_identifiers(self, condition, identifiers):
+        for ident in identifiers:
+            # Replace '.' by '_' in identifiers.
+            if ident.find('.') >= 0:
+                condition = condition.replace(ident, ident.replace('.', '_'))
+        return condition
+
+    def _undot_variables(self, variables):
+        # Replace '.' by '_' in variables names (identifiers)
+        return { k.replace('.', '_'): v for k, v in variables.items() }
+
+class ParseIdentifiers(ast.NodeVisitor):
+    '''
+        Class to parse identifiers (signals and attributes names)
+    '''
+
+    def __init__(self):
+        self.identifiers = []
+        self._attributes = []
+
+    def visit_Name(self, node):
+        def make_identifier(node_id):
+            return '.'.join(reversed(self._attributes + [node.id]))
+
+        if self._attributes:
+            # If a name is found with attributes available, build the identifier
+            # and reset the attributes list.
+            self.identifiers.append(make_identifier(node.id))
+            self._attributes = []
+        else:
+            self.identifiers.append(node.id)
+
+        super().generic_visit(node)
+
+    def visit_Attribute(self, node):
+        self._attributes.append(node.attr)
+        super().generic_visit(node)
 
 class LogReplayer(object):
     '''

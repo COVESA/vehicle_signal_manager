@@ -267,21 +267,21 @@ car.stop,[SIGNUM],'True'
                 replay_case='simple0-replay', wait_time_ms=5000)
 
     def test_simple3_xor_condition(self):
-        input_data = 'phone_call = "active"\nspeed = 5'
+        input_data = 'phone.call = "active"\nspeed.value = 5.0'
         expected_output = '''
-phone_call,[SIGNUM],'active'
+phone.call,[SIGNUM],'active'
 State = {
-phone_call = active
+phone.call = active
 }
-speed,[SIGNUM],5
+speed.value,[SIGNUM],5.0
 State = {
-phone_call = active
-speed = 5
+phone.call = active
+speed.value = 5.0
 }
 car.stop,[SIGNUM],'True'
-condition: ((phone_call == 'active') != (speed > 50)) => True
-phone_call,[SIGNUM],'"active"'
-speed,[SIGNUM],'5'
+condition: (phone.call == 'active' ^^ speed.value > 50.90) => True
+phone.call,[SIGNUM],'"active"'
+speed.value,[SIGNUM],'5.0'
 car.stop,[SIGNUM],'True'
         '''
         self.run_vsm('simple3', input_data, expected_output.strip() + '\n')
