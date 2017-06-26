@@ -319,14 +319,12 @@ State = {
 camera.backup.active = True
 transmission.gear = reverse
 }
-camera.backup.activated,[SIGNUM],'True'
 condition: (camera.backup.active == True) => True
 transmission.gear,[SIGNUM],'reverse'
 transmission.gear,[SIGNUM],'"forward"'
 transmission.gear,[SIGNUM],'"reverse"'
 lights.external.backup,[SIGNUM],'True'
 camera.backup.active,[SIGNUM],'true'
-camera.backup.activated,[SIGNUM],'True'
         '''
         self.run_vsm('monitored_condition', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1500)

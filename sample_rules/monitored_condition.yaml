@@ -33,7 +33,3 @@
       # after the monitor is started. If those criteria are not fulfilled,
       # an error will be logged
       stop: 1000
-
-      emit:
-        signal: camera.backup.activated
-        value: true
