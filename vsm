@@ -26,8 +26,6 @@ LOGIC_REPLACE = {'||': 'or',
                  'true': 'True',
                  'false': 'False'}
 
-KEYWORDS = ['condition', 'emit']
-
 LOG_FILE_PATH_DEFAULT = 'vsm.log'
 
 LOG_CAT_CONDITION_CHECKS = 'condition-checks'
@@ -38,6 +36,9 @@ SIGNAL_PREFIX_DELIM = ' '
 
 REPLAY_RATE_MIN = 1
 REPLAY_RATE_MAX = 10000
+
+NODE_CONDITION = 'condition'
+NODE_EMIT = 'emit'
 
 start_time_ms = 0
 logger = None
@@ -143,13 +144,13 @@ class State(object):
 
 
     def handle_emit(self, data, condition):
-        signal = data["emit"]["signal"]
-        value = data["emit"]["value"]
+        signal = data[NODE_EMIT]["signal"]
+        value = data[NODE_EMIT]["value"]
 
-        if "delay" in data["emit"].keys():
+        if "delay" in data[NODE_EMIT].keys():
             action = "threading.Thread(target=delayed_emit, args=( \
                             \'{}\', \'{}\', {})).start()".format(signal,
-                            value, data["emit"]["delay"])
+                            value, data[NODE_EMIT]["delay"])
         else:
             action = "emit(\'{}\', \'{}\')".format(signal, value)
 
@@ -162,7 +163,7 @@ class State(object):
             exec(rule)
 
     def handle_condition(self, data):
-        orig_condition = data["condition"]
+        orig_condition = data[NODE_CONDITION]
         # Handle XOR operator (if it is found)
         if orig_condition.find('^^') >= 0:
             condition = _handle_xor_condition(orig_condition)
@@ -208,9 +209,9 @@ class State(object):
 
     def __parse_items(self, item):
         keys = list(item.keys())
-        if "condition" in item:
+        if NODE_CONDITION in item:
             self.handle_condition(item)
-        elif "emit" in item:
+        elif NODE_EMIT in item:
             self.handle_emit(item, False)
 
     def parse_rules(self, rules_file):
