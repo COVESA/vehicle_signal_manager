@@ -368,6 +368,154 @@ class LogReplayer(object):
             self.name = name
             self.value = value
 
+class TreeNode:
+    '''
+    A representation of a node in the tree of the rules file.
+
+    This is used to maintain the hierarchy of the various rules elements so they
+    may be reflected for behavior such as subconditions' dependence on changes
+    to their parent conditions.
+    '''
+
+    def __init__(self, node_type, value, start=-1, stop=-1):
+        self.parent = None
+        self.node_type = node_type
+        self.value = value
+        self.children = []
+
+        if node_type == NODE_CONDITION:
+            self.monitor_init_time_ms = -1
+            self.start_timer = None
+            self.stop_timer = None
+            self.condition_met = False
+            self.start_time_ms = start
+            self.stop_time_ms = stop
+
+    def __str__(self):
+        return self.__str_indent("")
+
+    def __str_indent(self, indent):
+        string = "{}type: {}, value: {}".format(indent, self.node_type,
+                str(self.value))
+        for child in self.children:
+            string += "\n" + child.__str_indent(indent + "  ")
+        return string
+
+    def add_child(self, child):
+        self.children.append(child)
+        child.parent = self
+
+    def find(self, value):
+        '''
+        Find the given value in the tree, starting at this node and searching
+        below (but never up).
+        '''
+        found_node = None
+
+        if self.value == value:
+            return self
+
+        for child in self.children:
+            found_node = child.find(value)
+            if found_node != None:
+                break
+
+        return found_node
+
+    def find_subconditions(self):
+        '''
+        If this node is a condition node, find all subconditions.
+
+        Subconditions are not direct descendents of a condition node but a child
+        of the condition node's sibling "wrapper block" (eg, is wrapped by a
+        "parallel", "exclusive", or "sequence" keyword). This pattern may
+        continue to an arbitrary depth like:
+
+                                ⋮         ⋮
+                          condition A  ____parallel_____
+                                      /        |        \\
+                              condition B  condition C  sequence
+                                  ⋮            ⋮          |
+                                                    condition D
+                                                        ⋮
+
+        In this example, conditions B-D are subconditions of condition A.
+        '''
+        subconditions = []
+
+        if self.node_type == NODE_CONDITION:
+            for sibling in self.get_siblings():
+                if sibling.node_type in WRAPPER_KEYWORDS:
+                    # all wrapper blocks contain exactly one "block" node which
+                    # contains the real content nodes
+                    sibling_grandchildren = sibling.children[0].children
+
+                    for child in sibling_grandchildren:
+                        if child.node_type == NODE_CONDITION:
+                            subconditions.append(child)
+                            subconditions.extend(child.find_subconditions())
+
+        return subconditions
+
+    def get_siblings(self):
+        if self.parent == None:
+            return []
+
+        return [x for x in self.parent.children if x is not self]
+
+    def notify_ancestor_condition(self, state):
+        if state:
+            if not self.start_timer and not self.stop_timer:
+                # set up monitor
+                self.monitor_init_time_ms = get_runtime()
+                self.start_timer = threading.Timer(self.start_time_ms/1000,
+                        self.start_timeout_func)
+                self.stop_timer = threading.Timer(self.stop_time_ms/1000,
+                        self.stop_timeout_func)
+                self.start_timer.start()
+                self.stop_timer.start()
+        else:
+            # parent condition is no longer true so cancel monitor
+            self._monitor_completed(True, "")
+
+    def notify_condition(self, state):
+        start_max_ms = self.monitor_init_time_ms + self.start_time_ms
+        stop_min_ms = self.monitor_init_time_ms + self.stop_time_ms
+        if state:
+            # if a monitor is active and we're beyond the 'start' time, don't
+            # let the node's condition_met change from False to True so our
+            # thread can catch the failure without a race condition
+            if (not self.start_timer and not self.stop_timer) \
+                    or not get_runtime() > start_time_ms:
+                self.condition_met = True
+        else:
+            self.condition_met = False
+
+        for subcondition in self.find_subconditions():
+            subcondition.notify_ancestor_condition(self.condition_met)
+
+    def _monitor_completed(self, succeeded, failure_message):
+        if self.start_timer:
+            self.start_timer.cancel()
+            self.start_timer = None
+
+        if self.stop_timer:
+            self.stop_timer.cancel()
+            self.stop_timer = None
+
+        if not succeeded:
+            self.condition_met = False
+            logger.e(failure_message)
+
+    def start_timeout_func(self):
+        if not self.condition_met:
+            self._monitor_completed(self.condition_met,
+                    "condition not met by 'stop' time of {}ms".format(
+                        self.stop_time_ms))
+
+    def stop_timeout_func(self):
+        self._monitor_completed(True, "")
+
 def show(signal, value, indicator):
     '''
         Show signal emission/reception
