@@ -276,18 +276,18 @@ class State(object):
     # NOTE: this is static as variables can't be passed by reference in parsed
     # code so we can't depend on the `self` variable
     @staticmethod
-    def condition_changed(condition, result, parent_ref):
+    def condition_changed(condition, result, node_ref):
         logger.i("condition: ({}) => {}".format(condition, str(result)))
 
-        parent_node = node_refs[parent_ref]
-        parent_node.notify_condition(result)
+        node = node_refs[node_ref]
+        node.notify_condition(result)
 
-    def generate_condition_code(self, condition, result, parent):
-        parent_ref = repr(parent)
-        node_refs[parent_ref] = parent
+    def generate_condition_code(self, condition, result, node):
+        node_ref = repr(node)
+        node_refs[node_ref] = node
 
         return "State.condition_changed({}, {}, \'{}\')".format(repr(condition),
-                result, parent_ref)
+                result, node_ref)
 
     def __parse_items(self, item, parent):
         conditions_rules = None
