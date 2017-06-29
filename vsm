@@ -53,7 +53,7 @@ NODE_BLOCK = 'block'
 # * parallel:  all matching conditions will be executed
 WRAPPER_KEYWORDS = (NODE_PARALLEL)
 
-start_time_ms = 0
+program_start_time_ms = 0
 logger = None
 config_tree = None
 # NOTE: this is global because variables can't be passed by reference in parsed
@@ -744,10 +744,10 @@ def run(state):
         exit(0)
 
 def get_runtime():
-    return round(time.perf_counter() * 1000 - start_time_ms)
+    return round(time.perf_counter() * 1000 - program_start_time_ms)
 
 if __name__ == "__main__":
-    start_time_ms = round(time.perf_counter() * 1000)
+    program_start_time_ms = round(time.perf_counter() * 1000)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--initial-state', type=str,
