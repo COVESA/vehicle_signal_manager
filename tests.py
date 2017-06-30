@@ -286,6 +286,158 @@ car.stop,[SIGNUM],'True'
         '''
         self.run_vsm('simple3', input_data, expected_output.strip() + '\n')
 
+    def test_monitored_condition_satisfied(self):
+        '''
+        This test case sets up the monitor for the subcondition and
+        satisfies the subcondition before the 'stop' timeout (and thus omits the
+        error message in the expected output).
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'transmission.gear = "forward"\n' \
+                'transmission.gear = "reverse"\n' \
+                'camera.backup.active = true'
+        expected_output = '''
+transmission.gear,[SIGNUM],'reverse'
+transmission.gear,[SIGNUM],'forward'
+State = {
+transmission.gear = forward
+}
+condition: (transmission.gear == 'reverse') => False
+transmission.gear,[SIGNUM],'reverse'
+State = {
+transmission.gear = reverse
+}
+lights.external.backup,[SIGNUM],'True'
+condition: (transmission.gear == 'reverse') => True
+camera.backup.active,[SIGNUM],True
+State = {
+camera.backup.active = True
+transmission.gear = reverse
+}
+camera.backup.activated,[SIGNUM],'True'
+condition: (camera.backup.active == True) => True
+transmission.gear,[SIGNUM],'reverse'
+transmission.gear,[SIGNUM],'"forward"'
+transmission.gear,[SIGNUM],'"reverse"'
+lights.external.backup,[SIGNUM],'True'
+camera.backup.active,[SIGNUM],'true'
+camera.backup.activated,[SIGNUM],'True'
+        '''
+        self.run_vsm('monitored_condition', input_data,
+                expected_output.strip() + '\n', wait_time_ms=1500)
+
+    def test_monitored_condition_child_failure(self):
+        '''
+        This test case sets up the monitor for the subcondition and
+        intentionally allows it to fail by not satisfying the subcondition
+        before the 'stop' timeout.
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'transmission.gear = "forward"\n' \
+            'transmission.gear = "reverse"'
+        expected_output = '''
+transmission.gear,[SIGNUM],'reverse'
+transmission.gear,[SIGNUM],'forward'
+State = {
+transmission.gear = forward
+}
+condition: (transmission.gear == 'reverse') => False
+transmission.gear,[SIGNUM],'reverse'
+State = {
+transmission.gear = reverse
+}
+lights.external.backup,[SIGNUM],'True'
+condition: (transmission.gear == 'reverse') => True
+condition not met by 'start' time of 200ms
+transmission.gear,[SIGNUM],'reverse'
+transmission.gear,[SIGNUM],'"forward"'
+transmission.gear,[SIGNUM],'"reverse"'
+lights.external.backup,[SIGNUM],'True'
+        '''
+        self.run_vsm('monitored_condition', input_data,
+                expected_output.strip() + '\n', wait_time_ms=1500)
+
+    def test_monitored_condition_parent_cancellation(self):
+        '''
+        This test case sets up the monitor for the subcondition and changes the
+        evaluation of the parent condition to cancel the monitor before the
+        'stop' timeout.
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'transmission.gear = "forward"\n' \
+            'transmission.gear = "reverse" \n' \
+            'transmission.gear = "forward"'
+        expected_output = '''
+transmission.gear,[SIGNUM],'reverse'
+transmission.gear,[SIGNUM],'forward'
+State = {
+transmission.gear = forward
+}
+condition: (transmission.gear == 'reverse') => False
+transmission.gear,[SIGNUM],'reverse'
+State = {
+transmission.gear = reverse
+}
+lights.external.backup,[SIGNUM],'True'
+condition: (transmission.gear == 'reverse') => True
+transmission.gear,[SIGNUM],'forward'
+State = {
+transmission.gear = forward
+}
+condition: (transmission.gear == 'reverse') => False
+transmission.gear,[SIGNUM],'reverse'
+transmission.gear,[SIGNUM],'"forward"'
+transmission.gear,[SIGNUM],'"reverse"'
+lights.external.backup,[SIGNUM],'True'
+transmission.gear,[SIGNUM],'"forward"'
+        '''
+        self.run_vsm('monitored_condition', input_data,
+                expected_output.strip() + '\n', wait_time_ms=1500)
+
+    def test_parallel(self):
+        # skip when running with IPC module because output is slightly different
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'transmission_gear = "reverse"\n'\
+                'wipers = true'
+        expected_output = '''
+transmission_gear,[SIGNUM],'reverse'
+State = {
+transmission_gear = reverse
+}
+reverse,[SIGNUM],'True'
+condition: (transmission_gear == 'reverse') => True
+wipers,[SIGNUM],True
+State = {
+transmission_gear = reverse
+wipers = True
+}
+lights,[SIGNUM],'on'
+condition: (wipers == True) => True
+transmission_gear,[SIGNUM],'"reverse"'
+reverse,[SIGNUM],'True'
+wipers,[SIGNUM],'true'
+lights,[SIGNUM],'on'
+        '''
+        self.run_vsm('parallel', input_data, expected_output.strip() + '\n',
+                False)
+
     @unittest.skip("delays not yet implemented")
     def test_delay(self):
         input_data = ''
@@ -297,9 +449,9 @@ lights.external.headlights,[SIGNUM],'True'
 
     @unittest.skip("exclusive conditions not yet implemented")
     def test_exclusive_conditions(self):
-        input_data = 'remote_key.command = "unlock"\nlock_state = true\nremote_key.command = "lock"'
+        input_data = 'remote.key.command = "unlock"\nlock.state = true\nremote.key.command = "lock"'
         expected_output = '''
-lock_state,[SIGNUM],'False'
+lock.state,[SIGNUM],'False'
 horn,[SIGNUM],'True'
         '''
         self.run_vsm('exclusive_conditions', input_data, expected_output.strip() + '\n', False)

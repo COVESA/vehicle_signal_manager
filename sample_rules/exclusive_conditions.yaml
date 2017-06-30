@@ -7,7 +7,7 @@
 # We start the process by unconditionally emitting a signal for part of the
 # checked states below
 - emit:
-    signal: lock_state
+    signal: lock.state
     value: true
 
 # the first condition clause to be met will be executed to the exclusion of the
@@ -15,18 +15,18 @@
 - exclusive:
     # If the vehicle is locked and we unlock it, signal to unlock
     - condition: >
-        lock_state == true &&
-        remote_key.command == 'unlock'
+        lock.state == true &&
+        remote.key.command == 'unlock'
 
       emit:
-          signal: lock_state
+          signal: lock.state
           value: false
 
     # If the vehicle is locked and we further lock it, honk the horn to give a
     # clear indicator it is indeed locked
     - condition: >
-        lock_state == true &&
-        remote_key.command == 'lock'
+        lock.state == true &&
+        remote.key.command == 'lock'
 
       emit:
           signal: horn
