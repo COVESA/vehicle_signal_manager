@@ -215,9 +215,12 @@ class State(object):
                 start=start_time_ms, stop=stop_time_ms)
         parent.add_child(condition_node)
 
-        action_true_1_module = self.handle_emit(data, parent)
-        action_true_1_body = action_true_1_module.body[0]
-        actions_true = [action_true_1_body]
+        if NODE_EMIT in data:
+            action_true_1_module = self.handle_emit(data, parent)
+            action_true_1_body = action_true_1_module.body[0]
+            actions_true = [action_true_1_body]
+        else:
+            actions_true = []
         actions_false = []
 
         if self.log_categories[LOG_CAT_CONDITION_CHECKS]:
