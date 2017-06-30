@@ -436,6 +436,70 @@ lights,[SIGNUM],'on'
         self.run_vsm('parallel', input_data, expected_output.strip() + '\n',
                 False)
 
+    def test_sequence_in_order(self):
+        # skip when running with IPC module because output is slightly different
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'transmission.gear = "park"\n' \
+                'ignition = true'
+        expected_output = '''
+transmission.gear,[SIGNUM],'park'
+State = {
+transmission.gear = park
+}
+parked,[SIGNUM],'True'
+condition: (transmission.gear == 'park') => True
+ignition,[SIGNUM],True
+State = {
+ignition = True
+transmission.gear = park
+}
+ignited,[SIGNUM],'True'
+condition: (ignition == True) => True
+transmission.gear,[SIGNUM],'"park"'
+parked,[SIGNUM],'True'
+ignition,[SIGNUM],'true'
+ignited,[SIGNUM],'True'
+        '''
+        self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
+
+    def test_sequence_out_then_in_order(self):
+        # skip when running with IPC module because output is slightly different
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'ignition = true\n' \
+                'transmission.gear = "park"\n' \
+                'ignition = true'
+        expected_output = '''
+ignition,[SIGNUM],True
+State = {
+ignition = True
+}
+changed value for signal 'ignition' ignored because prior conditions in its sequence block have not been met
+transmission.gear,[SIGNUM],'park'
+State = {
+ignition = True
+transmission.gear = park
+}
+parked,[SIGNUM],'True'
+condition: (transmission.gear == 'park') => True
+ignition,[SIGNUM],True
+State = {
+ignition = True
+transmission.gear = park
+}
+ignited,[SIGNUM],'True'
+condition: (ignition == True) => True
+ignition,[SIGNUM],'true'
+transmission.gear,[SIGNUM],'"park"'
+parked,[SIGNUM],'True'
+ignition,[SIGNUM],'true'
+ignited,[SIGNUM],'True'
+        '''
+        self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
+
     @unittest.skip("delays not yet implemented")
     def test_delay(self):
         input_data = ''

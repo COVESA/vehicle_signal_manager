@@ -39,10 +39,13 @@ REPLAY_RATE_MIN = 1
 REPLAY_RATE_MAX = 10000
 
 NODE_CONDITION = 'condition'
+# position of condition node within a list in the rule file
+NODE_CONDITION_POS = 0
 NODE_EMIT = 'emit'
 NODE_START = 'start'
 NODE_STOP = 'stop'
 NODE_PARALLEL = 'parallel'
+NODE_SEQUENCE = 'sequence'
 # a special name for the rules document root node
 NODE_ROOT = 'root'
 # a special node to group YAML map elements together which otherwise would not
@@ -51,7 +54,9 @@ NODE_BLOCK = 'block'
 
 # these keywords wrap one or more conditions into a block where:
 # * parallel:  all matching conditions will be executed
-WRAPPER_KEYWORDS = (NODE_PARALLEL)
+# * sequence:  any and all matching conditions will be executed but conditions
+#              will only be monitored in their sequential order
+WRAPPER_KEYWORDS = (NODE_PARALLEL, NODE_SEQUENCE)
 
 program_start_time_ms = 0
 logger = None
@@ -241,6 +246,7 @@ class State(object):
         ast.fix_missing_locations(ast_module)
 
         rule = compile(ast_module, '<string>', 'exec')
+        condition_node.rule = rule
 
         return [condition_expr, rule, parser.identifiers]
 
@@ -253,10 +259,10 @@ class State(object):
         # wrapper keywords (which this method handles) can only have list items
         # as direct children
         if issubclass(type(data[child_type]), list):
-            for item in data[child_type]:
-                wrapper_node = TreeNode(child_type, None)
-                parent.add_child(wrapper_node)
+            wrapper_node = TreeNode(child_type, None)
+            parent.add_child(wrapper_node)
 
+            for item in data[child_type]:
                 block_node = TreeNode(NODE_BLOCK, None)
                 wrapper_node.add_child(block_node)
 
@@ -276,24 +282,26 @@ class State(object):
     # NOTE: this is static as variables can't be passed by reference in parsed
     # code so we can't depend on the `self` variable
     @staticmethod
-    def condition_changed(condition, result, parent_ref):
+    def condition_changed(condition, result, node_ref):
         logger.i("condition: ({}) => {}".format(condition, str(result)))
 
-        parent_node = node_refs[parent_ref]
-        parent_node.notify_condition(result)
+        node = node_refs[node_ref]
+        node.notify_condition(result)
 
-    def generate_condition_code(self, condition, result, parent):
-        parent_ref = repr(parent)
-        node_refs[parent_ref] = parent
+    def generate_condition_code(self, condition, result, node):
+        node_ref = repr(node)
+        node_refs[node_ref] = node
 
         return "State.condition_changed({}, {}, \'{}\')".format(repr(condition),
-                result, parent_ref)
+                result, node_ref)
 
     def __parse_items(self, item, parent):
         conditions_rules = None
 
         if NODE_PARALLEL in item:
             conditions_rules = self.handle_children(item, NODE_PARALLEL, parent)
+        if NODE_SEQUENCE in item:
+            conditions_rules = self.handle_children(item, NODE_SEQUENCE, parent)
         if NODE_CONDITION in item:
             condition, rule, identifiers = self.handle_condition(item, parent)
             self.add_rule(identifiers, rule)
@@ -348,13 +356,26 @@ class State(object):
 
         elif signal in self.rules:
             for rule in self.rules[signal]:
-                try:
-                    exec(rule, globals(),
-                            self._undot_variables(vars(self.variables)))
-                except NameError:
-                    # Names used in rules are not always present
-                    # in the state.
-                    pass
+                exec_rule = True
+
+                condition_node_matches = config_tree.get_conditions_by_rule(
+                        rule)
+                for condition in condition_node_matches:
+                    if condition.condition_is_sequence_blocked():
+                        logger.e("changed value for signal '{}' ignored " \
+                                "because prior conditions in its sequence " \
+                                "block have not been met".format(signal))
+                        exec_rule = False
+                        break
+
+                if exec_rule:
+                    try:
+                        exec(rule, globals(),
+                                self._undot_variables(vars(self.variables)))
+                    except NameError:
+                        # Names used in rules are not always present
+                        # in the state.
+                        pass
 
     def got_signal_record(self, signal, value):
         vars(self.variables)[signal] = value
@@ -485,6 +506,7 @@ class TreeNode:
         self.node_type = node_type
         self.value = value
         self.children = []
+        self.rule = None
 
         if node_type == NODE_CONDITION:
             self.monitor_init_time_ms = -1
@@ -493,6 +515,8 @@ class TreeNode:
             self.condition_met = False
             self.start_time_ms = start
             self.stop_time_ms = stop
+        elif node_type == NODE_SEQUENCE:
+            self.next_grandchild_index = 0
 
     def __str__(self):
         return self.__str_indent("")
@@ -531,8 +555,8 @@ class TreeNode:
 
         Subconditions are not direct descendents of a condition node but a child
         of the condition node's sibling "wrapper block" (eg, is wrapped by a
-        "parallel", "exclusive", or "sequence" keyword). This pattern may
-        continue to an arbitrary depth like:
+        "parallel" or "sequence" keyword). This pattern may continue to an
+        arbitrary depth like:
 
                                 ⋮         ⋮
                           condition A  ____parallel_____
@@ -607,6 +631,9 @@ class TreeNode:
         for subcondition in self.find_subconditions():
             subcondition.notify_ancestor_condition(self.condition_met)
 
+        if self.parent and self.parent.parent:
+            self.parent.parent._sequence_iterate_safe(self)
+
     def _monitor_completed(self, succeeded, failure_message):
         if self.start_timer:
             self.start_timer.cancel()
@@ -628,6 +655,58 @@ class TreeNode:
 
     def stop_timeout_func(self):
         self._monitor_completed(True, "")
+
+    def _sequence_iterate_safe(self, condition_grandchild):
+        if self.node_type != NODE_SEQUENCE:
+            return
+        
+        if condition_grandchild.condition_is_sequence_next():
+            self.next_grandchild_index += 1
+            # there will be exactly one condition per child node
+            if self.next_grandchild_index >= len(self.children):
+                self.next_grandchild_index = 0
+        else:
+            pass
+
+    def condition_is_sequence_next(self):
+        grandparent = self.condition_get_sequence_grandparent()
+        if not grandparent:
+            return False
+
+        next_seq_condition = grandparent.children[
+                grandparent.next_grandchild_index].children[NODE_CONDITION_POS]
+
+        if next_seq_condition is self:
+            return True
+
+        return False
+
+    def condition_get_sequence_grandparent(self):
+        if self.node_type == NODE_CONDITION:
+            grandparent = None
+            if self.parent:
+                grandparent = self.parent.parent
+                if grandparent and grandparent.node_type == NODE_SEQUENCE:
+                    return grandparent
+
+        return None
+
+    def condition_is_sequence_blocked(self):
+        seq_grandparent = self.condition_get_sequence_grandparent()
+        if seq_grandparent and not self.condition_is_sequence_next():
+            return True
+
+        return False
+
+    def get_conditions_by_rule(self, rule):
+        conditions_matched = []
+        for child in self.children:
+            conditions_matched.extend(child.get_conditions_by_rule(rule))
+        
+        if self.node_type == NODE_CONDITION and self.rule is rule:
+            conditions_matched.append(self)
+
+        return conditions_matched
 
 def show(signal, value, indicator):
     '''

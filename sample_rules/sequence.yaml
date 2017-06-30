@@ -1,0 +1,14 @@
+%YAML 1.2
+---
+# Describe some sequential conditions where the first condition must be met
+# before evaluating the second, second before evaluating the third, and so on.
+- sequence:
+    - condition: transmission.gear == 'park'
+      emit:
+          signal: parked
+          value: true
+
+    - condition: ignition == true
+      emit:
+          signal: ignited
+          value: true
