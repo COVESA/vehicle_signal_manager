@@ -1,0 +1,5 @@
+%YAML 1.2
+---
+- emit:
+    signal: lock.state
+    value: true
