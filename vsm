@@ -61,9 +61,10 @@ WRAPPER_KEYWORDS = (NODE_PARALLEL, NODE_SEQUENCE)
 program_start_time_ms = 0
 logger = None
 config_tree = None
-# NOTE: this is global because variables can't be passed by reference in parsed
-# code so we can't encapsulate it
+# NOTE: these are global because variables can't be passed by reference in
+# parsed code so we can't encapsulate it
 node_refs = {}
+state = None
 
 
 def _format_signal_msg(signal, value, indicator):
@@ -153,6 +154,7 @@ class State(object):
         self.log_categories = log_categories
 
         self.rules = {}
+        self.exec_queue = []
 
         with open(rules) as rules_file:
             self.parse_rules(rules_file)
@@ -164,6 +166,15 @@ class State(object):
                 for item in data:
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
+
+        # inject this object into the globals dictionary so it will be available
+        # to the function we're executing (since it won't really be filled in
+        # until after this constructor completes)
+        global_vars = globals()
+        global_vars["state"] = self
+
+        for rule in self.exec_queue:
+            exec(rule, global_vars, self._undot_variables(vars(self.variables)))
 
     def handle_emit(self, data, parent):
         signal = data[NODE_EMIT]["signal"]
@@ -311,7 +322,9 @@ class State(object):
                 rule = compile(module, '<string>', 'exec')
 
             if rule != None:
-                exec(rule)
+                # queue up rules to execute until after this class has finished
+                # initializing
+                self.exec_queue.append(rule)
 
         if conditions_rules:
             return conditions_rules
@@ -378,10 +391,12 @@ class State(object):
                         pass
 
     def got_signal_record(self, signal, value):
-        vars(self.variables)[signal] = value
-
         # Record received signal in logs.
         logger.signal(signal, value, SIGNAL_PREFIX_INCOMING)
+        self._update_report_state(signal, value)
+
+    def _update_report_state(self, signal, value):
+        vars(self.variables)[signal] = value
 
         logger.i("State = {")
         for k, v in sorted(vars(self.variables).items()):
@@ -727,6 +742,7 @@ def emit(signal, value):
     # Record sent signal in logs.
     logger.signal(signal, value, SIGNAL_PREFIX_OUTGOING)
     send(signal, value)
+    state._update_report_state(signal, value)
 
 def delayed_got_signal(signal, value, delay, state):
     time.sleep(delay/1000)

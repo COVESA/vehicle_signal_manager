@@ -17,6 +17,9 @@ SIGNAL_FORMAT = '{},[SIGNUM],\'{}\'\n'
 VSM_LOG_FILE = 'vsm-tests.log'
 
 def format_ipc_input(data):
+    if not data:
+        return []
+
     return [ (x.strip(), y.strip()) for x, y in \
              [ elm.split('=') for elm in data.split('\n') ] ]
 
@@ -149,6 +152,10 @@ State = {
 transmission_gear = reverse
 }
 car.backup,[SIGNUM],'True'
+State = {
+car.backup = True
+transmission_gear = reverse
+}
 condition: (transmission_gear == 'reverse') => True
 transmission_gear,[SIGNUM],'"reverse"'
 car.backup,[SIGNUM],'True'
@@ -164,6 +171,10 @@ transmission_gear = reverse
 }
 condition: (transmission_gear == 'reverse') => True
 car.backup,[SIGNUM],'True'
+State = {
+car.backup = True
+transmission_gear = reverse
+}
 transmission_gear,[SIGNUM],'"reverse"'
 car.backup,[SIGNUM],'True'
         '''
@@ -191,6 +202,11 @@ damage = True
 moving = false
 }
 car.stop,[SIGNUM],'True'
+State = {
+car.stop = True
+damage = True
+moving = false
+}
 condition: (moving != True and damage == True) => True
 damage,[SIGNUM],'true'
 car.stop,[SIGNUM],'True'
@@ -242,6 +258,11 @@ damage = True
 moving = False
 }
 car.stop,[SIGNUM],'True'
+State = {
+car.stop = True
+damage = True
+moving = False
+}
 condition: (moving != True and damage == True) => True
 moving,[SIGNUM],'false'
 damage,[SIGNUM],'true'
@@ -260,6 +281,10 @@ State = {
 phone_call = active
 }
 car.stop,[SIGNUM],'True'
+State = {
+car.stop = True
+phone_call = active
+}
 phone_call,[SIGNUM],'active'
 car.stop,[SIGNUM],'True'
         '''
@@ -279,6 +304,11 @@ phone.call = active
 speed.value = 5.0
 }
 car.stop,[SIGNUM],'True'
+State = {
+car.stop = True
+phone.call = active
+speed.value = 5.0
+}
 condition: (phone.call == 'active' ^^ speed.value > 50.90) => True
 phone.call,[SIGNUM],'"active"'
 speed.value,[SIGNUM],'5.0'
@@ -303,6 +333,9 @@ car.stop,[SIGNUM],'True'
                 'camera.backup.active = true'
         expected_output = '''
 transmission.gear,[SIGNUM],'reverse'
+State = {
+transmission.gear = reverse
+}
 transmission.gear,[SIGNUM],'forward'
 State = {
 transmission.gear = forward
@@ -313,10 +346,15 @@ State = {
 transmission.gear = reverse
 }
 lights.external.backup,[SIGNUM],'True'
+State = {
+lights.external.backup = True
+transmission.gear = reverse
+}
 condition: (transmission.gear == 'reverse') => True
 camera.backup.active,[SIGNUM],True
 State = {
 camera.backup.active = True
+lights.external.backup = True
 transmission.gear = reverse
 }
 condition: (camera.backup.active == True) => True
@@ -345,6 +383,9 @@ camera.backup.active,[SIGNUM],'true'
             'transmission.gear = "reverse"'
         expected_output = '''
 transmission.gear,[SIGNUM],'reverse'
+State = {
+transmission.gear = reverse
+}
 transmission.gear,[SIGNUM],'forward'
 State = {
 transmission.gear = forward
@@ -355,6 +396,10 @@ State = {
 transmission.gear = reverse
 }
 lights.external.backup,[SIGNUM],'True'
+State = {
+lights.external.backup = True
+transmission.gear = reverse
+}
 condition: (transmission.gear == 'reverse') => True
 condition not met by 'start' time of 200ms
 transmission.gear,[SIGNUM],'reverse'
@@ -382,6 +427,9 @@ lights.external.backup,[SIGNUM],'True'
             'transmission.gear = "forward"'
         expected_output = '''
 transmission.gear,[SIGNUM],'reverse'
+State = {
+transmission.gear = reverse
+}
 transmission.gear,[SIGNUM],'forward'
 State = {
 transmission.gear = forward
@@ -392,9 +440,14 @@ State = {
 transmission.gear = reverse
 }
 lights.external.backup,[SIGNUM],'True'
+State = {
+lights.external.backup = True
+transmission.gear = reverse
+}
 condition: (transmission.gear == 'reverse') => True
 transmission.gear,[SIGNUM],'forward'
 State = {
+lights.external.backup = True
 transmission.gear = forward
 }
 condition: (transmission.gear == 'reverse') => False
@@ -420,13 +473,24 @@ State = {
 transmission_gear = reverse
 }
 reverse,[SIGNUM],'True'
+State = {
+reverse = True
+transmission_gear = reverse
+}
 condition: (transmission_gear == 'reverse') => True
 wipers,[SIGNUM],True
 State = {
+reverse = True
 transmission_gear = reverse
 wipers = True
 }
 lights,[SIGNUM],'on'
+State = {
+lights = on
+reverse = True
+transmission_gear = reverse
+wipers = True
+}
 condition: (wipers == True) => True
 transmission_gear,[SIGNUM],'"reverse"'
 reverse,[SIGNUM],'True'
@@ -449,13 +513,24 @@ State = {
 transmission.gear = park
 }
 parked,[SIGNUM],'True'
+State = {
+parked = True
+transmission.gear = park
+}
 condition: (transmission.gear == 'park') => True
 ignition,[SIGNUM],True
 State = {
 ignition = True
+parked = True
 transmission.gear = park
 }
 ignited,[SIGNUM],'True'
+State = {
+ignited = True
+ignition = True
+parked = True
+transmission.gear = park
+}
 condition: (ignition == True) => True
 transmission.gear,[SIGNUM],'"park"'
 parked,[SIGNUM],'True'
@@ -484,13 +559,25 @@ ignition = True
 transmission.gear = park
 }
 parked,[SIGNUM],'True'
+State = {
+ignition = True
+parked = True
+transmission.gear = park
+}
 condition: (transmission.gear == 'park') => True
 ignition,[SIGNUM],True
 State = {
 ignition = True
+parked = True
 transmission.gear = park
 }
 ignited,[SIGNUM],'True'
+State = {
+ignited = True
+ignition = True
+parked = True
+transmission.gear = park
+}
 condition: (ignition == True) => True
 ignition,[SIGNUM],'true'
 transmission.gear,[SIGNUM],'"park"'
@@ -499,6 +586,18 @@ ignition,[SIGNUM],'true'
 ignited,[SIGNUM],'True'
         '''
         self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
+
+    def test_unconditional_emit(self):
+        input_data = ''
+        expected_output = '''
+lock.state,[SIGNUM],'True'
+State = {
+lock.state = True
+}
+lock.state,[SIGNUM],'True'
+        '''
+        self.run_vsm('unconditional_emit', input_data,
+                expected_output.strip() + '\n')
 
     @unittest.skip("delays not yet implemented")
     def test_delay(self):
