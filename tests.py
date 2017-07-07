@@ -357,6 +357,7 @@ camera.backup.active = True
 lights.external.backup = True
 transmission.gear = reverse
 }
+parent condition: transmission.gear == reverse
 condition: (camera.backup.active == True) => True
 transmission.gear,[SIGNUM],'reverse'
 transmission.gear,[SIGNUM],'"forward"'
