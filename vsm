@@ -21,6 +21,7 @@ import json
 from ipc.loader import load_plugin, LoaderError
 import os
 import uuid
+import vsmlib.utils
 
 LOGIC_REPLACE = {'||': 'or',
                  '&&': 'and',
@@ -65,12 +66,15 @@ config_tree = None
 # parsed code so we can't encapsulate it
 node_refs = {}
 state = None
+signal_to_num = {}
 
 
 def _format_signal_msg(signal, value, indicator):
-    # NOTE: the "[SIGNUM]" field is a temporary placeholder for the signal ID
-    return '{} {},{},[SIGNUM],{}'.format(indicator, get_runtime(),
-                                         signal, repr(value))
+    signum = "[SIGNUM]"
+    if signal in signal_to_num:
+        signum = signal_to_num[signal]
+    return '{} {},{},{},{}'.format(indicator, get_runtime(), signal, signum,
+                                   repr(value))
 
 def _handle_xor_condition(condition):
     '''
@@ -180,6 +184,9 @@ class State(object):
         signal = data[NODE_EMIT]["signal"]
         value = data[NODE_EMIT]["value"]
 
+        if signal not in signal_to_num:
+            self._exit_signal_num_missing(signal)
+
         if "delay" in data[NODE_EMIT].keys():
             action = "threading.Thread(target=delayed_emit, args=( \
                             \'{}\', \'{}\', {})).start()".format(signal,
@@ -192,6 +199,11 @@ class State(object):
         parent.add_child(TreeNode(NODE_EMIT, ast_node))
 
         return ast_node
+
+    def _exit_signal_num_missing(self, signal):
+        print("signal '{}' not in signal number mapping file".format(signal),
+              file=sys.stderr)
+        exit(1)
 
     def handle_condition(self, data, parent):
         orig_condition = data[NODE_CONDITION]
@@ -206,6 +218,10 @@ class State(object):
         # Parse identifiers (variables).
         parser = ParseIdentifiers()
         parser.visit(condition_expr)
+
+        for ident in parser.identifiers:
+            if ident not in signal_to_num:
+                self._exit_signal_num_missing(ident)
 
         # Replace dot (.) by underscore (_) in the condition identifiers so they
         # can be correctly interpreted like Python variables.
@@ -910,7 +926,13 @@ if __name__ == "__main__":
     parser.set_defaults(log_condition_checks=True)
     parser.add_argument('--log-format', choices=['catapult'],
                         help='Write log file in specified format')
+    parser.add_argument('--signal-number-file', type=str,
+                        help='.vsi file which maps all signal names to numbers',
+                        required=True)
     args = parser.parse_args()
+
+    signal_to_num, vsi_version = vsmlib.utils.parse_signal_num_file(
+        args.signal_number_file)
 
     log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
 
