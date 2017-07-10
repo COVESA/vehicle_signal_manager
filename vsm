@@ -61,9 +61,10 @@ WRAPPER_KEYWORDS = (NODE_PARALLEL, NODE_SEQUENCE)
 program_start_time_ms = 0
 logger = None
 config_tree = None
-# NOTE: this is global because variables can't be passed by reference in parsed
-# code so we can't encapsulate it
+# NOTE: these are global because variables can't be passed by reference in
+# parsed code so we can't encapsulate it
 node_refs = {}
+state = None
 
 
 def _format_signal_msg(signal, value, indicator):
@@ -153,6 +154,7 @@ class State(object):
         self.log_categories = log_categories
 
         self.rules = {}
+        self.exec_queue = []
 
         with open(rules) as rules_file:
             self.parse_rules(rules_file)
@@ -164,6 +166,15 @@ class State(object):
                 for item in data:
                     item = item.replace(" ", "").split("=")
                     vars(self.variables)[item[0]] = item[1]
+
+        # inject this object into the globals dictionary so it will be available
+        # to the function we're executing (since it won't really be filled in
+        # until after this constructor completes)
+        global_vars = globals()
+        global_vars["state"] = self
+
+        for rule in self.exec_queue:
+            exec(rule, global_vars, self._undot_variables(vars(self.variables)))
 
     def handle_emit(self, data, parent):
         signal = data[NODE_EMIT]["signal"]
@@ -217,7 +228,8 @@ class State(object):
                 stop_time_ms = data[NODE_STOP]
 
         condition_node = TreeNode(NODE_CONDITION, condition_expr,
-                start=start_time_ms, stop=stop_time_ms)
+                start=start_time_ms, stop=stop_time_ms,
+                signals=parser.identifiers)
         parent.add_child(condition_node)
 
         if NODE_EMIT in data:
@@ -283,10 +295,16 @@ class State(object):
     # code so we can't depend on the `self` variable
     @staticmethod
     def condition_changed(condition, result, node_ref):
-        logger.i("condition: ({}) => {}".format(condition, str(result)))
-
         node = node_refs[node_ref]
         node.notify_condition(result)
+
+        for ancestor in node.get_ancestor_conditions():
+            if ancestor.signals:
+                for signal in ancestor.signals:
+                    logger.i("parent condition: {} == {}".format(signal,
+                        vars(state.variables)[signal]))
+
+        logger.i("condition: ({}) => {}".format(condition, str(result)))
 
     def generate_condition_code(self, condition, result, node):
         node_ref = repr(node)
@@ -311,7 +329,9 @@ class State(object):
                 rule = compile(module, '<string>', 'exec')
 
             if rule != None:
-                exec(rule)
+                # queue up rules to execute until after this class has finished
+                # initializing
+                self.exec_queue.append(rule)
 
         if conditions_rules:
             return conditions_rules
@@ -378,10 +398,12 @@ class State(object):
                         pass
 
     def got_signal_record(self, signal, value):
-        vars(self.variables)[signal] = value
-
         # Record received signal in logs.
         logger.signal(signal, value, SIGNAL_PREFIX_INCOMING)
+        self._update_report_state(signal, value)
+
+    def _update_report_state(self, signal, value):
+        vars(self.variables)[signal] = value
 
         logger.i("State = {")
         for k, v in sorted(vars(self.variables).items()):
@@ -501,7 +523,7 @@ class TreeNode:
     to their parent conditions.
     '''
 
-    def __init__(self, node_type, value, start=-1, stop=-1):
+    def __init__(self, node_type, value, start=-1, stop=-1, signals=None):
         self.parent = None
         self.node_type = node_type
         self.value = value
@@ -515,6 +537,8 @@ class TreeNode:
             self.condition_met = False
             self.start_time_ms = start
             self.stop_time_ms = stop
+            self.signals = signals
+
         elif node_type == NODE_SEQUENCE:
             self.next_grandchild_index = 0
 
@@ -583,6 +607,36 @@ class TreeNode:
                             subconditions.extend(child.find_subconditions())
 
         return subconditions
+
+    def get_ancestor_conditions(self):
+        if self.node_type == NODE_CONDITION and self.parent:
+            conditions = self._get_ancestor_conditions()
+            # exclude self because it is not an ancestor of itself
+            conditions.remove(self)
+            return conditions
+
+        return []
+
+    def _get_ancestor_conditions(self):
+        ancestor_conditions = []
+
+        if self.node_type == NODE_CONDITION:
+            ancestor_conditions.append(self)
+
+        if self.node_type != NODE_ROOT and self.parent:
+            # for wrapper nodes, we need to follow a path through their sibling
+            # condition nodes since the ancestry isn't direct
+            if self.parent.node_type in WRAPPER_KEYWORDS:
+                parent_siblings = self.parent.get_siblings()
+                for parent_sibling in parent_siblings:
+                    if parent_sibling.node_type == NODE_CONDITION:
+                        ancestor_conditions.extend(
+                                parent_sibling._get_ancestor_conditions())
+            else:
+                ancestor_conditions.extend(
+                        self.parent._get_ancestor_conditions())
+
+        return ancestor_conditions
 
     def get_siblings(self):
         if self.parent == None:
@@ -727,6 +781,7 @@ def emit(signal, value):
     # Record sent signal in logs.
     logger.signal(signal, value, SIGNAL_PREFIX_OUTGOING)
     send(signal, value)
+    state._update_report_state(signal, value)
 
 def delayed_got_signal(signal, value, delay, state):
     time.sleep(delay/1000)
