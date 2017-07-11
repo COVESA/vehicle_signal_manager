@@ -1,9 +1,7 @@
 1.0
 car.backup 3
 car.stop 4
-transmission_gear 1
 transmission.gear 9
-phone_call 2
 phone.call 7
 speed.value 8
 damage 5

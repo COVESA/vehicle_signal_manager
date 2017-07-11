@@ -1,9 +1,9 @@
-- condition: transmission_gear == 'reverse'
+- condition: transmission.gear == 'reverse'
   emit:
     signal: car.backup
     value: true
 
-- condition: phone_call == 'active'
+- condition: phone.call == 'active'
   emit:
     signal: car.stop
     value: true

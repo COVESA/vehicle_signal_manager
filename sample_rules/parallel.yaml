@@ -8,7 +8,7 @@
           signal: lights
           value: 'on'
 
-    - condition: transmission_gear == 'reverse'
+    - condition: transmission.gear == 'reverse'
       emit:
           signal: reverse
           value: true

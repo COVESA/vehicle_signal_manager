@@ -167,50 +167,50 @@ class TestVSM(unittest.TestCase):
 
 
     def test_simple0(self):
-        input_data = 'transmission_gear = "reverse"'
+        input_data = 'transmission.gear = "reverse"'
         expected_output = '''
-transmission_gear,1,'reverse'
+transmission.gear,9,'reverse'
 State = {
-transmission_gear = reverse
+transmission.gear = reverse
 }
 car.backup,3,'True'
 State = {
 car.backup = True
-transmission_gear = reverse
+transmission.gear = reverse
 }
-condition: (transmission_gear == 'reverse') => True
-transmission_gear,1,'"reverse"'
+condition: (transmission.gear == 'reverse') => True
+transmission.gear,9,'"reverse"'
 car.backup,3,'True'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n')
 
     def test_simple0_delayed(self):
-        input_data = 'transmission_gear = "reverse"'
+        input_data = 'transmission.gear = "reverse"'
         expected_output = '''
-transmission_gear,1,'reverse'
+transmission.gear,9,'reverse'
 State = {
-transmission_gear = reverse
+transmission.gear = reverse
 }
-condition: (transmission_gear == 'reverse') => True
+condition: (transmission.gear == 'reverse') => True
 car.backup,3,'True'
 State = {
 car.backup = True
-transmission_gear = reverse
+transmission.gear = reverse
 }
-transmission_gear,1,'"reverse"'
+transmission.gear,9,'"reverse"'
 car.backup,3,'True'
         '''
         self.run_vsm('simple0_delay', input_data, expected_output.strip() + '\n')
 
     def test_simple0_uninteresting(self):
-        input_data = 'phone_call = "inactive"'
+        input_data = 'phone.call = "inactive"'
         expected_output = '''
-phone_call,2,'inactive'
+phone.call,7,'inactive'
 State = {
-phone_call = inactive
+phone.call = inactive
 }
-condition: (phone_call == 'active') => False
-phone_call,2,'"inactive"'
+condition: (phone.call == 'active') => False
+phone.call,7,'"inactive"'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
                 send_quit=True)
@@ -298,16 +298,16 @@ car.stop,4,'True'
 
         input_data = ''
         expected_output = '''
-phone_call,2,'active'
+phone.call,7,'active'
 State = {
-phone_call = active
+phone.call = active
 }
 car.stop,4,'True'
 State = {
 car.stop = True
-phone_call = active
+phone.call = active
 }
-phone_call,2,'active'
+phone.call,7,'active'
 car.stop,4,'True'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
@@ -488,34 +488,34 @@ transmission.gear,9,'"forward"'
         if self.ipc_module:
             self.skipTest("test not compatible with IPC module")
 
-        input_data = 'transmission_gear = "reverse"\n'\
+        input_data = 'transmission.gear = "reverse"\n'\
                 'wipers = true'
         expected_output = '''
-transmission_gear,1,'reverse'
+transmission.gear,9,'reverse'
 State = {
-transmission_gear = reverse
+transmission.gear = reverse
 }
 reverse,16,'True'
 State = {
 reverse = True
-transmission_gear = reverse
+transmission.gear = reverse
 }
-condition: (transmission_gear == 'reverse') => True
+condition: (transmission.gear == 'reverse') => True
 wipers,17,True
 State = {
 reverse = True
-transmission_gear = reverse
+transmission.gear = reverse
 wipers = True
 }
 lights,18,'on'
 State = {
 lights = on
 reverse = True
-transmission_gear = reverse
+transmission.gear = reverse
 wipers = True
 }
 condition: (wipers == True) => True
-transmission_gear,1,'"reverse"'
+transmission.gear,9,'"reverse"'
 reverse,16,'True'
 wipers,17,'true'
 lights,18,'on'
