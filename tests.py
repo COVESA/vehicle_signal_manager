@@ -216,7 +216,7 @@ phone.call,7,'"inactive"'
                 send_quit=True)
 
     def test_simple2_initial(self):
-        input_data = 'damage = true'
+        input_data = 'damage = True'
         expected_output = '''
 damage,5,True
 State = {
@@ -230,7 +230,7 @@ damage = True
 moving = false
 }
 condition: (moving != True and damage == True) => True
-damage,5,'true'
+damage,5,'True'
 car.stop,4,'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
@@ -248,7 +248,7 @@ moving,6,'false'
                 send_quit=True)
 
     def test_simple2_modify_uninteresting(self):
-        input_data = 'moving = true\ndamage = true'
+        input_data = 'moving = True\ndamage = True'
         expected_output = '''
 moving,6,True
 State = {
@@ -261,14 +261,14 @@ damage = True
 moving = True
 }
 condition: (moving != True and damage == True) => False
-moving,6,'true'
-damage,5,'true'
+moving,6,'True'
+damage,5,'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
                 send_quit=True)
 
     def test_simple2_multiple_signals(self):
-        input_data = 'moving = false\ndamage = true'
+        input_data = 'moving = false\ndamage = True'
         expected_output = '''
 moving,6,False
 State = {
@@ -287,7 +287,7 @@ moving = False
 }
 condition: (moving != True and damage == True) => True
 moving,6,'false'
-damage,5,'true'
+damage,5,'True'
 car.stop,4,'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n', False)
@@ -352,7 +352,7 @@ car.stop,4,'True'
 
         input_data = 'transmission.gear = "forward"\n' \
                 'transmission.gear = "reverse"\n' \
-                'camera.backup.active = true'
+                'camera.backup.active = True'
         expected_output = '''
 transmission.gear,9,'reverse'
 State = {
@@ -385,7 +385,7 @@ transmission.gear,9,'reverse'
 transmission.gear,9,'"forward"'
 transmission.gear,9,'"reverse"'
 lights.external.backup,14,'True'
-camera.backup.active,15,'true'
+camera.backup.active,15,'True'
         '''
         self.run_vsm('monitored_condition', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1500)
@@ -489,7 +489,7 @@ transmission.gear,9,'"forward"'
             self.skipTest("test not compatible with IPC module")
 
         input_data = 'transmission.gear = "reverse"\n'\
-                'wipers = true'
+                'wipers = True'
         expected_output = '''
 transmission.gear,9,'reverse'
 State = {
@@ -517,7 +517,7 @@ wipers = True
 condition: (wipers == True) => True
 transmission.gear,9,'"reverse"'
 reverse,16,'True'
-wipers,17,'true'
+wipers,17,'True'
 lights,18,'on'
         '''
         self.run_vsm('parallel', input_data, expected_output.strip() + '\n',
@@ -529,7 +529,7 @@ lights,18,'on'
             self.skipTest("test not compatible with IPC module")
 
         input_data = 'transmission.gear = "park"\n' \
-                'ignition = true'
+                'ignition = True'
         expected_output = '''
 transmission.gear,9,'park'
 State = {
@@ -557,7 +557,7 @@ transmission.gear = park
 condition: (ignition == True) => True
 transmission.gear,9,'"park"'
 parked,11,'True'
-ignition,10,'true'
+ignition,10,'True'
 ignited,12,'True'
         '''
         self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
@@ -567,9 +567,9 @@ ignited,12,'True'
         if self.ipc_module:
             self.skipTest("test not compatible with IPC module")
 
-        input_data = 'ignition = true\n' \
+        input_data = 'ignition = True\n' \
                 'transmission.gear = "park"\n' \
-                'ignition = true'
+                'ignition = True'
         expected_output = '''
 ignition,10,True
 State = {
@@ -602,10 +602,10 @@ parked = True
 transmission.gear = park
 }
 condition: (ignition == True) => True
-ignition,10,'true'
+ignition,10,'True'
 transmission.gear,9,'"park"'
 parked,11,'True'
-ignition,10,'true'
+ignition,10,'True'
 ignited,12,'True'
         '''
         self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
@@ -633,7 +633,7 @@ lights.external.headlights,19,'True'
 
     @unittest.skip("exclusive conditions not yet implemented")
     def test_exclusive_conditions(self):
-        input_data = 'remote.key.command = "unlock"\nlock.state = true\nremote.key.command = "lock"'
+        input_data = 'remote.key.command = "unlock"\nlock.state = True\nremote.key.command = "lock"'
         expected_output = '''
 lock.state,13,'False'
 horn,20,'True'

@@ -815,7 +815,9 @@ def process(state, signal, value):
             (value[0] == "'" and value[-1] == "'")
 
     def is_bool(value):
-        return value == 'true' or value == 'false'
+        # specifically only allow the first letter to be capital to disallow,
+        # eg, "trUe"
+        return value in ('true', 'True') or value in ('false', 'False')
 
     # Check and convert value to the types: string, bool, float or int
     try:
@@ -824,7 +826,7 @@ def process(state, signal, value):
         if is_string(value):
             value = value[1:-1]
         elif is_bool(value):
-            value = value == 'true' or False
+            value = value in ('true', 'True') or False
         elif value.find('.') >= 0:
             value = float(value)
         elif value.isnumeric():
