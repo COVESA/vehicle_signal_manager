@@ -221,13 +221,13 @@ phone.call,7,'"inactive"'
 damage,5,True
 State = {
 damage = True
-moving = false
+moving = False
 }
 car.stop,4,'True'
 State = {
 car.stop = True
 damage = True
-moving = false
+moving = False
 }
 condition: (moving != True and damage == True) => True
 damage,5,'True'
@@ -236,13 +236,13 @@ car.stop,4,'True'
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
 
     def test_simple2_initial_uninteresting(self):
-        input_data = 'moving = false'
+        input_data = 'moving = False'
         expected_output = '''
 moving,6,False
 State = {
 moving = False
 }
-moving,6,'false'
+moving,6,'False'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
                 send_quit=True)
@@ -268,7 +268,7 @@ damage,5,'True'
                 send_quit=True)
 
     def test_simple2_multiple_signals(self):
-        input_data = 'moving = false\ndamage = True'
+        input_data = 'moving = False\ndamage = True'
         expected_output = '''
 moving,6,False
 State = {
@@ -286,7 +286,7 @@ damage = True
 moving = False
 }
 condition: (moving != True and damage == True) => True
-moving,6,'false'
+moving,6,'False'
 damage,5,'True'
 car.stop,4,'True'
         '''
