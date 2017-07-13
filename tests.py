@@ -9,12 +9,16 @@ import os
 import time
 import unittest
 from subprocess import Popen, PIPE
+import vsmlib.utils
 
 
 RULES_PATH = os.path.abspath(os.path.join('.', 'sample_rules'))
 LOGS_PATH = os.path.abspath(os.path.join('.', 'sample_logs'))
-SIGNAL_FORMAT = '{},[SIGNUM],\'{}\'\n'
+SIGNAL_NUMBER_PATH = os.path.abspath(os.path.join('.', 'signal_number_maps'))
+SIGNAL_FORMAT = '{},{},\'{}\'\n'
 VSM_LOG_FILE = 'vsm-tests.log'
+SIGNAL_NUM_FILE = 'samples.vsi'
+SIGNUM_DEFAULT = "[SIGNUM]"
 
 def format_ipc_input(data):
     if not data:
@@ -38,6 +42,18 @@ def _remove_timestamp(output_string):
 
     return output
 
+def _signal_format_safe(signal_to_num, signal, value):
+    string = ''
+    signum = None
+    if signal in signal_to_num:
+        signum = signal_to_num[signal]
+    elif signal != '':
+        signum = SIGNUM_DEFAULT
+
+    if signum:
+        string = SIGNAL_FORMAT.format(signal, signum, value)
+
+    return string
 
 class TestVSM(unittest.TestCase):
     ipc_module = None
@@ -83,6 +99,9 @@ class TestVSM(unittest.TestCase):
 
         cmd = ['./vsm' ]
 
+        sig_num_path = os.path.join(SIGNAL_NUMBER_PATH, SIGNAL_NUM_FILE)
+        cmd += [ '--signal-number-file={}'.format(sig_num_path) ]
+
         # Direct verbose output (including state dumps) to log file so the tests
         # can parse them.
         cmd += [ '--log-file={}'.format(VSM_LOG_FILE) ]
@@ -102,13 +121,16 @@ class TestVSM(unittest.TestCase):
             cmd += [ '--ipc-module={}'.format(TestVSM.ipc_module) ]
 
         if TestVSM.ipc_module == 'zeromq':
+            signal_to_num, _ = vsmlib.utils.parse_signal_num_file(sig_num_path)
+
             process = Popen(cmd)
 
             process_output = ''
             for signal, value in format_ipc_input(input_data):
                 self._send(signal, value)
                 # Record sent signal directly from the test.
-                process_output += SIGNAL_FORMAT.format(signal, value)
+                process_output += _signal_format_safe(signal_to_num, signal,
+                                                      value)
 
             # Send 'quit' for those tests with no signal reply, otherwise
             # they will be stuck on 'receive'.
@@ -120,7 +142,7 @@ class TestVSM(unittest.TestCase):
             time.sleep(0.01)
             process.terminate()
 
-            process_output += '' if (sig == '') else SIGNAL_FORMAT.format(sig, val)
+            process_output += _signal_format_safe(signal_to_num, sig, val)
         else:
             process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
@@ -145,128 +167,128 @@ class TestVSM(unittest.TestCase):
 
 
     def test_simple0(self):
-        input_data = 'transmission_gear = "reverse"'
+        input_data = 'transmission.gear = "reverse"'
         expected_output = '''
-transmission_gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
-transmission_gear = reverse
+transmission.gear = reverse
 }
-car.backup,[SIGNUM],'True'
+car.backup,3,'True'
 State = {
 car.backup = True
-transmission_gear = reverse
+transmission.gear = reverse
 }
-condition: (transmission_gear == 'reverse') => True
-transmission_gear,[SIGNUM],'"reverse"'
-car.backup,[SIGNUM],'True'
+condition: (transmission.gear == 'reverse') => True
+transmission.gear,9,'"reverse"'
+car.backup,3,'True'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n')
 
     def test_simple0_delayed(self):
-        input_data = 'transmission_gear = "reverse"'
+        input_data = 'transmission.gear = "reverse"'
         expected_output = '''
-transmission_gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
-transmission_gear = reverse
+transmission.gear = reverse
 }
-condition: (transmission_gear == 'reverse') => True
-car.backup,[SIGNUM],'True'
+condition: (transmission.gear == 'reverse') => True
+car.backup,3,'True'
 State = {
 car.backup = True
-transmission_gear = reverse
+transmission.gear = reverse
 }
-transmission_gear,[SIGNUM],'"reverse"'
-car.backup,[SIGNUM],'True'
+transmission.gear,9,'"reverse"'
+car.backup,3,'True'
         '''
         self.run_vsm('simple0_delay', input_data, expected_output.strip() + '\n')
 
     def test_simple0_uninteresting(self):
-        input_data = 'phone_call = "inactive"'
+        input_data = 'phone.call = "inactive"'
         expected_output = '''
-phone_call,[SIGNUM],'inactive'
+phone.call,7,'inactive'
 State = {
-phone_call = inactive
+phone.call = inactive
 }
-condition: (phone_call == 'active') => False
-phone_call,[SIGNUM],'"inactive"'
+condition: (phone.call == 'active') => False
+phone.call,7,'"inactive"'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
                 send_quit=True)
 
     def test_simple2_initial(self):
-        input_data = 'damage = true'
+        input_data = 'damage = True'
         expected_output = '''
-damage,[SIGNUM],True
+damage,5,True
 State = {
 damage = True
 moving = false
 }
-car.stop,[SIGNUM],'True'
+car.stop,4,'True'
 State = {
 car.stop = True
 damage = True
 moving = false
 }
 condition: (moving != True and damage == True) => True
-damage,[SIGNUM],'true'
-car.stop,[SIGNUM],'True'
+damage,5,'True'
+car.stop,4,'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
 
     def test_simple2_initial_uninteresting(self):
         input_data = 'moving = false'
         expected_output = '''
-moving,[SIGNUM],False
+moving,6,False
 State = {
 moving = False
 }
-moving,[SIGNUM],'false'
+moving,6,'false'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
                 send_quit=True)
 
     def test_simple2_modify_uninteresting(self):
-        input_data = 'moving = true\ndamage = true'
+        input_data = 'moving = True\ndamage = True'
         expected_output = '''
-moving,[SIGNUM],True
+moving,6,True
 State = {
 moving = True
 }
 condition: (moving != True and damage == True) => False
-damage,[SIGNUM],True
+damage,5,True
 State = {
 damage = True
 moving = True
 }
 condition: (moving != True and damage == True) => False
-moving,[SIGNUM],'true'
-damage,[SIGNUM],'true'
+moving,6,'True'
+damage,5,'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
                 send_quit=True)
 
     def test_simple2_multiple_signals(self):
-        input_data = 'moving = false\ndamage = true'
+        input_data = 'moving = false\ndamage = True'
         expected_output = '''
-moving,[SIGNUM],False
+moving,6,False
 State = {
 moving = False
 }
-damage,[SIGNUM],True
+damage,5,True
 State = {
 damage = True
 moving = False
 }
-car.stop,[SIGNUM],'True'
+car.stop,4,'True'
 State = {
 car.stop = True
 damage = True
 moving = False
 }
 condition: (moving != True and damage == True) => True
-moving,[SIGNUM],'false'
-damage,[SIGNUM],'true'
-car.stop,[SIGNUM],'True'
+moving,6,'false'
+damage,5,'True'
+car.stop,4,'True'
         '''
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n', False)
 
@@ -276,17 +298,17 @@ car.stop,[SIGNUM],'True'
 
         input_data = ''
         expected_output = '''
-phone_call,[SIGNUM],'active'
+phone.call,7,'active'
 State = {
-phone_call = active
+phone.call = active
 }
-car.stop,[SIGNUM],'True'
+car.stop,4,'True'
 State = {
 car.stop = True
-phone_call = active
+phone.call = active
 }
-phone_call,[SIGNUM],'active'
-car.stop,[SIGNUM],'True'
+phone.call,7,'active'
+car.stop,4,'True'
         '''
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
                 replay_case='simple0-replay', wait_time_ms=5000)
@@ -294,25 +316,25 @@ car.stop,[SIGNUM],'True'
     def test_simple3_xor_condition(self):
         input_data = 'phone.call = "active"\nspeed.value = 5.0'
         expected_output = '''
-phone.call,[SIGNUM],'active'
+phone.call,7,'active'
 State = {
 phone.call = active
 }
-speed.value,[SIGNUM],5.0
+speed.value,8,5.0
 State = {
 phone.call = active
 speed.value = 5.0
 }
-car.stop,[SIGNUM],'True'
+car.stop,4,'True'
 State = {
 car.stop = True
 phone.call = active
 speed.value = 5.0
 }
 condition: (phone.call == 'active' ^^ speed.value > 50.90) => True
-phone.call,[SIGNUM],'"active"'
-speed.value,[SIGNUM],'5.0'
-car.stop,[SIGNUM],'True'
+phone.call,7,'"active"'
+speed.value,8,'5.0'
+car.stop,4,'True'
         '''
         self.run_vsm('simple3', input_data, expected_output.strip() + '\n')
 
@@ -330,28 +352,28 @@ car.stop,[SIGNUM],'True'
 
         input_data = 'transmission.gear = "forward"\n' \
                 'transmission.gear = "reverse"\n' \
-                'camera.backup.active = true'
+                'camera.backup.active = True'
         expected_output = '''
-transmission.gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
-transmission.gear,[SIGNUM],'forward'
+transmission.gear,9,'forward'
 State = {
 transmission.gear = forward
 }
 condition: (transmission.gear == 'reverse') => False
-transmission.gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
-lights.external.backup,[SIGNUM],'True'
+lights.external.backup,14,'True'
 State = {
 lights.external.backup = True
 transmission.gear = reverse
 }
 condition: (transmission.gear == 'reverse') => True
-camera.backup.active,[SIGNUM],True
+camera.backup.active,15,True
 State = {
 camera.backup.active = True
 lights.external.backup = True
@@ -359,11 +381,11 @@ transmission.gear = reverse
 }
 parent condition: transmission.gear == reverse
 condition: (camera.backup.active == True) => True
-transmission.gear,[SIGNUM],'reverse'
-transmission.gear,[SIGNUM],'"forward"'
-transmission.gear,[SIGNUM],'"reverse"'
-lights.external.backup,[SIGNUM],'True'
-camera.backup.active,[SIGNUM],'true'
+transmission.gear,9,'reverse'
+transmission.gear,9,'"forward"'
+transmission.gear,9,'"reverse"'
+lights.external.backup,14,'True'
+camera.backup.active,15,'True'
         '''
         self.run_vsm('monitored_condition', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1500)
@@ -383,30 +405,30 @@ camera.backup.active,[SIGNUM],'true'
         input_data = 'transmission.gear = "forward"\n' \
             'transmission.gear = "reverse"'
         expected_output = '''
-transmission.gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
-transmission.gear,[SIGNUM],'forward'
+transmission.gear,9,'forward'
 State = {
 transmission.gear = forward
 }
 condition: (transmission.gear == 'reverse') => False
-transmission.gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
-lights.external.backup,[SIGNUM],'True'
+lights.external.backup,14,'True'
 State = {
 lights.external.backup = True
 transmission.gear = reverse
 }
 condition: (transmission.gear == 'reverse') => True
 condition not met by 'start' time of 200ms
-transmission.gear,[SIGNUM],'reverse'
-transmission.gear,[SIGNUM],'"forward"'
-transmission.gear,[SIGNUM],'"reverse"'
-lights.external.backup,[SIGNUM],'True'
+transmission.gear,9,'reverse'
+transmission.gear,9,'"forward"'
+transmission.gear,9,'"reverse"'
+lights.external.backup,14,'True'
         '''
         self.run_vsm('monitored_condition', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1500)
@@ -427,36 +449,36 @@ lights.external.backup,[SIGNUM],'True'
             'transmission.gear = "reverse" \n' \
             'transmission.gear = "forward"'
         expected_output = '''
-transmission.gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
-transmission.gear,[SIGNUM],'forward'
+transmission.gear,9,'forward'
 State = {
 transmission.gear = forward
 }
 condition: (transmission.gear == 'reverse') => False
-transmission.gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
-lights.external.backup,[SIGNUM],'True'
+lights.external.backup,14,'True'
 State = {
 lights.external.backup = True
 transmission.gear = reverse
 }
 condition: (transmission.gear == 'reverse') => True
-transmission.gear,[SIGNUM],'forward'
+transmission.gear,9,'forward'
 State = {
 lights.external.backup = True
 transmission.gear = forward
 }
 condition: (transmission.gear == 'reverse') => False
-transmission.gear,[SIGNUM],'reverse'
-transmission.gear,[SIGNUM],'"forward"'
-transmission.gear,[SIGNUM],'"reverse"'
-lights.external.backup,[SIGNUM],'True'
-transmission.gear,[SIGNUM],'"forward"'
+transmission.gear,9,'reverse'
+transmission.gear,9,'"forward"'
+transmission.gear,9,'"reverse"'
+lights.external.backup,14,'True'
+transmission.gear,9,'"forward"'
         '''
         self.run_vsm('monitored_condition', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1500)
@@ -466,37 +488,37 @@ transmission.gear,[SIGNUM],'"forward"'
         if self.ipc_module:
             self.skipTest("test not compatible with IPC module")
 
-        input_data = 'transmission_gear = "reverse"\n'\
-                'wipers = true'
+        input_data = 'transmission.gear = "reverse"\n'\
+                'wipers = True'
         expected_output = '''
-transmission_gear,[SIGNUM],'reverse'
+transmission.gear,9,'reverse'
 State = {
-transmission_gear = reverse
+transmission.gear = reverse
 }
-reverse,[SIGNUM],'True'
+reverse,16,'True'
 State = {
 reverse = True
-transmission_gear = reverse
+transmission.gear = reverse
 }
-condition: (transmission_gear == 'reverse') => True
-wipers,[SIGNUM],True
+condition: (transmission.gear == 'reverse') => True
+wipers,17,True
 State = {
 reverse = True
-transmission_gear = reverse
+transmission.gear = reverse
 wipers = True
 }
-lights,[SIGNUM],'on'
+lights,18,'on'
 State = {
 lights = on
 reverse = True
-transmission_gear = reverse
+transmission.gear = reverse
 wipers = True
 }
 condition: (wipers == True) => True
-transmission_gear,[SIGNUM],'"reverse"'
-reverse,[SIGNUM],'True'
-wipers,[SIGNUM],'true'
-lights,[SIGNUM],'on'
+transmission.gear,9,'"reverse"'
+reverse,16,'True'
+wipers,17,'True'
+lights,18,'on'
         '''
         self.run_vsm('parallel', input_data, expected_output.strip() + '\n',
                 False)
@@ -507,25 +529,25 @@ lights,[SIGNUM],'on'
             self.skipTest("test not compatible with IPC module")
 
         input_data = 'transmission.gear = "park"\n' \
-                'ignition = true'
+                'ignition = True'
         expected_output = '''
-transmission.gear,[SIGNUM],'park'
+transmission.gear,9,'park'
 State = {
 transmission.gear = park
 }
-parked,[SIGNUM],'True'
+parked,11,'True'
 State = {
 parked = True
 transmission.gear = park
 }
 condition: (transmission.gear == 'park') => True
-ignition,[SIGNUM],True
+ignition,10,True
 State = {
 ignition = True
 parked = True
 transmission.gear = park
 }
-ignited,[SIGNUM],'True'
+ignited,12,'True'
 State = {
 ignited = True
 ignition = True
@@ -533,10 +555,10 @@ parked = True
 transmission.gear = park
 }
 condition: (ignition == True) => True
-transmission.gear,[SIGNUM],'"park"'
-parked,[SIGNUM],'True'
-ignition,[SIGNUM],'true'
-ignited,[SIGNUM],'True'
+transmission.gear,9,'"park"'
+parked,11,'True'
+ignition,10,'True'
+ignited,12,'True'
         '''
         self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
 
@@ -545,34 +567,34 @@ ignited,[SIGNUM],'True'
         if self.ipc_module:
             self.skipTest("test not compatible with IPC module")
 
-        input_data = 'ignition = true\n' \
+        input_data = 'ignition = True\n' \
                 'transmission.gear = "park"\n' \
-                'ignition = true'
+                'ignition = True'
         expected_output = '''
-ignition,[SIGNUM],True
+ignition,10,True
 State = {
 ignition = True
 }
 changed value for signal 'ignition' ignored because prior conditions in its sequence block have not been met
-transmission.gear,[SIGNUM],'park'
+transmission.gear,9,'park'
 State = {
 ignition = True
 transmission.gear = park
 }
-parked,[SIGNUM],'True'
+parked,11,'True'
 State = {
 ignition = True
 parked = True
 transmission.gear = park
 }
 condition: (transmission.gear == 'park') => True
-ignition,[SIGNUM],True
+ignition,10,True
 State = {
 ignition = True
 parked = True
 transmission.gear = park
 }
-ignited,[SIGNUM],'True'
+ignited,12,'True'
 State = {
 ignited = True
 ignition = True
@@ -580,22 +602,22 @@ parked = True
 transmission.gear = park
 }
 condition: (ignition == True) => True
-ignition,[SIGNUM],'true'
-transmission.gear,[SIGNUM],'"park"'
-parked,[SIGNUM],'True'
-ignition,[SIGNUM],'true'
-ignited,[SIGNUM],'True'
+ignition,10,'True'
+transmission.gear,9,'"park"'
+parked,11,'True'
+ignition,10,'True'
+ignited,12,'True'
         '''
         self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
 
     def test_unconditional_emit(self):
         input_data = ''
         expected_output = '''
-lock.state,[SIGNUM],'True'
+lock.state,13,'True'
 State = {
 lock.state = True
 }
-lock.state,[SIGNUM],'True'
+lock.state,13,'True'
         '''
         self.run_vsm('unconditional_emit', input_data,
                 expected_output.strip() + '\n')
@@ -604,17 +626,17 @@ lock.state,[SIGNUM],'True'
     def test_delay(self):
         input_data = ''
         expected_output = '''
-lights.external.headlights,[SIGNUM],'True'
+lights.external.headlights,19,'True'
         '''
         # NOTE: ideally, this would ensure the delay in output
         self.run_vsm('delay', input_data, expected_output.strip() + '\n', False)
 
     @unittest.skip("exclusive conditions not yet implemented")
     def test_exclusive_conditions(self):
-        input_data = 'remote.key.command = "unlock"\nlock.state = true\nremote.key.command = "lock"'
+        input_data = 'remote.key.command = "unlock"\nlock.state = True\nremote.key.command = "lock"'
         expected_output = '''
-lock.state,[SIGNUM],'False'
-horn,[SIGNUM],'True'
+lock.state,13,'False'
+horn,20,'True'
         '''
         self.run_vsm('exclusive_conditions', input_data, expected_output.strip() + '\n', False)
 

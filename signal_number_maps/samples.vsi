@@ -1,0 +1,19 @@
+1.0
+car.backup 3
+car.stop 4
+transmission.gear 9
+phone.call 7
+speed.value 8
+damage 5
+moving 6
+ignition 10
+ignited 12
+parked 11
+lock.state 13
+lights.external.backup 14
+lights.external.headlights 19
+camera.backup.active 15
+reverse 16
+wipers 17
+lights 18
+horn 20

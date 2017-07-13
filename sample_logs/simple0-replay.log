@@ -1,6 +1,6 @@
-> 1627,phone_call,[SIGNUM],'active'
+> 1627,phone.call,[SIGNUM],'active'
 State = {
-phone_call = active
+phone.call = active
 }
 < 2628,car.stop,[SIGNUM],'True'
-condition: (phone_call == 'active') => True
+condition: (phone.call == 'active') => True

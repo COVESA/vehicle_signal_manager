@@ -1,4 +1,4 @@
-- condition: transmission_gear == 'reverse'
+- condition: transmission.gear == 'reverse'
   emit:
     signal: car.backup
     value: true
