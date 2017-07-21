@@ -644,12 +644,61 @@ lights.external.headlights,19,'True'
         self.run_vsm('delay', input_data, expected_output.strip() + '\n', False,
                 wait_time_ms=2500)
 
-    @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
     def test_subclauses_arithmetic_booleans(self):
-        input_data = 'flux_capacitor.energy_generated = 1.1\nmovement.speed = 140'
+        # skip when running with IPC module because output is slightly different
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'flux_capacitor.energy_generated = 1.1\nspeed.value = 140'
         expected_output = '''
-lights.external.time_travel_imminent
-lights.internal.time_travel_imminent
+flux_capacitor.energy_generated,5030,1.1
+State = {
+flux_capacitor.energy_generated = 1.1
+}
+lights.external.time_travel_imminent,5032,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+}
+condition: (flux_capacitor.energy_generated >= 1.21 * 0.9 and not (flux_capacitor.energy_generated >= 1.21)
+) => True
+lights.external.time_travel_imminent,5032,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+}
+condition: (flux_capacitor.energy_generated >= 1.21 * 0.9 and not (flux_capacitor.energy_generated >= 1.21)
+) => True
+speed.value,8,140
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+speed.value = 140
+}
+lights.internal.time_travel_imminent,5031,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+lights.internal.time_travel_imminent = True
+speed.value = 140
+}
+condition: (( speed.value >= (88 - 10) * 1.6 and speed.value <  88 * 1.6 ) or ( flux_capacitor.energy_generated >= 1.21 * 0.9 and flux_capacitor.energy_generated < 1.21 )
+) => True
+lights.internal.time_travel_imminent,5031,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+lights.internal.time_travel_imminent = True
+speed.value = 140
+}
+condition: (( speed.value >= (88 - 10) * 1.6 and speed.value <  88 * 1.6 ) or ( flux_capacitor.energy_generated >= 1.21 * 0.9 and flux_capacitor.energy_generated < 1.21 )
+) => True
+flux_capacitor.energy_generated,5030,'1.1'
+lights.external.time_travel_imminent,5032,'True'
+lights.external.time_travel_imminent,5032,'True'
+speed.value,8,'140'
+lights.internal.time_travel_imminent,5031,'True'
+lights.internal.time_travel_imminent,5031,'True'
         '''
         self.run_vsm('subclauses_arithmetic_booleans', input_data,
                 expected_output.strip() + '\n', False)

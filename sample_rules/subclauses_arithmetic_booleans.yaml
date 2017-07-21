@@ -3,12 +3,6 @@
 # Check indicators of imminent time travel
 #
 # (Actually test support for subclauses, arithmetic, and boolean expressions)
-#
-# We start the process by unconditionally emitting a signal for part of the
-# checked states below
-- emit:
-    signal: speed.value
-    value: 100
 
 # In parallel, evaluate two sets of conditions to emit two different signals
 - parallel:
