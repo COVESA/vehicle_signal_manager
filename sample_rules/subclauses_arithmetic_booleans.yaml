@@ -7,7 +7,7 @@
 # We start the process by unconditionally emitting a signal for part of the
 # checked states below
 - emit:
-    signal: movement.speed
+    signal: speed.value
     value: 100
 
 # In parallel, evaluate two sets of conditions to emit two different signals
@@ -17,8 +17,8 @@
     # corresponding measurement (flux capacitor energy near 1.21 GW)
     - condition: >
         (
-        movement.speed >= (88 - 10) * 1.6 &&
-        movement.speed <  88 * 1.6
+        speed.value >= (88 - 10) * 1.6 &&
+        speed.value <  88 * 1.6
         ) ||
         (
         flux_capacitor.energy_generated >= 1.21 * 0.9 &&
