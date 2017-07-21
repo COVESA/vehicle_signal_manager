@@ -628,7 +628,9 @@ lock.state,13,'True'
         expected_output = '''
 lights.external.headlights,19,'True'
         '''
-        # NOTE: ideally, this would ensure the delay in output
+        # NOTE: ideally, this would ensure the delay in output but, for
+        # simplicity, that is handled in a manual test case. This simply ensures
+        # the output is correct.
         self.run_vsm('delay', input_data, expected_output.strip() + '\n', False)
 
     @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
