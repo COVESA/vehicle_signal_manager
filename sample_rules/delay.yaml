@@ -2,12 +2,6 @@
 ---
 # When the front wipers are enabled, ensure headlights are on (a legal
 # requirement in some jurisdictions and generally safer).
-#
-# We start the process by unconditionally emitting the relevant signal
-- emit:
-    signal: wipers.front.on
-    value: true
-
 - parallel:
     # We now monitor the incoming signal stream for specific conditions to be
     # met.

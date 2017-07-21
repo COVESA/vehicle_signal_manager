@@ -15,5 +15,6 @@ lights.external.headlights 19
 camera.backup.active 15
 reverse 16
 wipers 17
+wipers.front.on 5020
 lights 18
 horn 20

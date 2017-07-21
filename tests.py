@@ -622,16 +622,27 @@ lock.state,13,'True'
         self.run_vsm('unconditional_emit', input_data,
                 expected_output.strip() + '\n')
 
-    @unittest.skip("delays not yet implemented")
     def test_delay(self):
-        input_data = ''
+        input_data = 'wipers.front.on = True'
         expected_output = '''
+wipers.front.on,5020,True
+State = {
+wipers.front.on = True
+}
+condition: (wipers.front.on == True) => True
+lights.external.headlights,19,'True'
+State = {
+lights.external.headlights = True
+wipers.front.on = True
+}
+wipers.front.on,5020,'True'
 lights.external.headlights,19,'True'
         '''
         # NOTE: ideally, this would ensure the delay in output but, for
         # simplicity, that is handled in a manual test case. This simply ensures
         # the output is correct.
-        self.run_vsm('delay', input_data, expected_output.strip() + '\n', False)
+        self.run_vsm('delay', input_data, expected_output.strip() + '\n', False,
+                wait_time_ms=2500)
 
     @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
     def test_subclauses_arithmetic_booleans(self):
