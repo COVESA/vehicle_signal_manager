@@ -631,15 +631,6 @@ lights.external.headlights,19,'True'
         # NOTE: ideally, this would ensure the delay in output
         self.run_vsm('delay', input_data, expected_output.strip() + '\n', False)
 
-    @unittest.skip("exclusive conditions not yet implemented")
-    def test_exclusive_conditions(self):
-        input_data = 'remote.key.command = "unlock"\nlock.state = True\nremote.key.command = "lock"'
-        expected_output = '''
-lock.state,13,'False'
-horn,20,'True'
-        '''
-        self.run_vsm('exclusive_conditions', input_data, expected_output.strip() + '\n', False)
-
     @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
     def test_subclauses_arithmetic_booleans(self):
         input_data = 'flux_capacitor.energy_generated = 1.1\nmovement.speed = 140'
