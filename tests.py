@@ -203,6 +203,10 @@ car.backup,3,'True'
         self.run_vsm('simple0_delay', input_data, expected_output.strip() + '\n')
 
     def test_simple0_uninteresting(self):
+        '''
+        A test case where conditions to emit another signal are never triggered
+        '''
+
         input_data = 'phone.call = "inactive"'
         expected_output = '''
 phone.call,7,'inactive'
@@ -236,6 +240,10 @@ car.stop,4,'True'
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
 
     def test_simple2_initial_uninteresting(self):
+        '''
+        A test case where conditions to emit another signal are never triggered
+        '''
+
         input_data = 'moving = False'
         expected_output = '''
 moving,6,False
@@ -248,6 +256,10 @@ moving,6,'False'
                 send_quit=True)
 
     def test_simple2_modify_uninteresting(self):
+        '''
+        A test case where conditions to emit another signal are never triggered
+        '''
+
         input_data = 'moving = True\ndamage = True'
         expected_output = '''
 moving,6,True
@@ -293,6 +305,10 @@ car.stop,4,'True'
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n', False)
 
     def test_simple0_log_replay(self):
+        '''
+        A test of the log replay functionality
+        '''
+
         if self.ipc_module:
             self.skipTest("test not compatible with IPC module")
 
