@@ -22,9 +22,11 @@ from ipc.loader import load_plugin, LoaderError
 import os
 import uuid
 import vsmlib.utils
+import re
 
-LOGIC_REPLACE = {'||': 'or',
+LOGIC_REPLACE = {'\|\|': 'or',
                  '&&': 'and',
+                 r'!([^=])': r'not \1',
                  'true': 'True',
                  'false': 'False'}
 
@@ -361,7 +363,7 @@ class State(object):
         # Translate logical operations to Python, so that they
         # can be compiled.
         for key, value in LOGIC_REPLACE.items():
-             data = data.replace(key, value).strip()
+             data = re.sub(key, value, data).strip()
 
         data = yaml.safe_load(data)
 

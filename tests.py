@@ -203,6 +203,10 @@ car.backup,3,'True'
         self.run_vsm('simple0_delay', input_data, expected_output.strip() + '\n')
 
     def test_simple0_uninteresting(self):
+        '''
+        A test case where conditions to emit another signal are never triggered
+        '''
+
         input_data = 'phone.call = "inactive"'
         expected_output = '''
 phone.call,7,'inactive'
@@ -236,6 +240,10 @@ car.stop,4,'True'
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
 
     def test_simple2_initial_uninteresting(self):
+        '''
+        A test case where conditions to emit another signal are never triggered
+        '''
+
         input_data = 'moving = False'
         expected_output = '''
 moving,6,False
@@ -248,6 +256,10 @@ moving,6,'False'
                 send_quit=True)
 
     def test_simple2_modify_uninteresting(self):
+        '''
+        A test case where conditions to emit another signal are never triggered
+        '''
+
         input_data = 'moving = True\ndamage = True'
         expected_output = '''
 moving,6,True
@@ -293,6 +305,10 @@ car.stop,4,'True'
         self.run_vsm('simple2', input_data, expected_output.strip() + '\n', False)
 
     def test_simple0_log_replay(self):
+        '''
+        A test of the log replay functionality
+        '''
+
         if self.ipc_module:
             self.skipTest("test not compatible with IPC module")
 
@@ -622,30 +638,83 @@ lock.state,13,'True'
         self.run_vsm('unconditional_emit', input_data,
                 expected_output.strip() + '\n')
 
-    @unittest.skip("delays not yet implemented")
     def test_delay(self):
-        input_data = ''
+        input_data = 'wipers.front.on = True'
         expected_output = '''
+wipers.front.on,5020,True
+State = {
+wipers.front.on = True
+}
+condition: (wipers.front.on == True) => True
+lights.external.headlights,19,'True'
+State = {
+lights.external.headlights = True
+wipers.front.on = True
+}
+wipers.front.on,5020,'True'
 lights.external.headlights,19,'True'
         '''
-        # NOTE: ideally, this would ensure the delay in output
-        self.run_vsm('delay', input_data, expected_output.strip() + '\n', False)
+        # NOTE: ideally, this would ensure the delay in output but, for
+        # simplicity, that is handled in a manual test case. This simply ensures
+        # the output is correct.
+        self.run_vsm('delay', input_data, expected_output.strip() + '\n', False,
+                wait_time_ms=2500)
 
-    @unittest.skip("exclusive conditions not yet implemented")
-    def test_exclusive_conditions(self):
-        input_data = 'remote.key.command = "unlock"\nlock.state = True\nremote.key.command = "lock"'
-        expected_output = '''
-lock.state,13,'False'
-horn,20,'True'
-        '''
-        self.run_vsm('exclusive_conditions', input_data, expected_output.strip() + '\n', False)
-
-    @unittest.skip("subclauses, arithmetic, booleans not yet implemented")
     def test_subclauses_arithmetic_booleans(self):
-        input_data = 'flux_capacitor.energy_generated = 1.1\nmovement.speed = 140'
+        # skip when running with IPC module because output is slightly different
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'flux_capacitor.energy_generated = 1.1\nspeed.value = 140'
         expected_output = '''
-lights.external.time_travel_imminent
-lights.internal.time_travel_imminent
+flux_capacitor.energy_generated,5030,1.1
+State = {
+flux_capacitor.energy_generated = 1.1
+}
+lights.external.time_travel_imminent,5032,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+}
+condition: (flux_capacitor.energy_generated >= 1.21 * 0.9 and not (flux_capacitor.energy_generated >= 1.21)
+) => True
+lights.external.time_travel_imminent,5032,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+}
+condition: (flux_capacitor.energy_generated >= 1.21 * 0.9 and not (flux_capacitor.energy_generated >= 1.21)
+) => True
+speed.value,8,140
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+speed.value = 140
+}
+lights.internal.time_travel_imminent,5031,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+lights.internal.time_travel_imminent = True
+speed.value = 140
+}
+condition: (( speed.value >= (88 - 10) * 1.6 and speed.value <  88 * 1.6 ) or ( flux_capacitor.energy_generated >= 1.21 * 0.9 and flux_capacitor.energy_generated < 1.21 )
+) => True
+lights.internal.time_travel_imminent,5031,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+lights.internal.time_travel_imminent = True
+speed.value = 140
+}
+condition: (( speed.value >= (88 - 10) * 1.6 and speed.value <  88 * 1.6 ) or ( flux_capacitor.energy_generated >= 1.21 * 0.9 and flux_capacitor.energy_generated < 1.21 )
+) => True
+flux_capacitor.energy_generated,5030,'1.1'
+lights.external.time_travel_imminent,5032,'True'
+lights.external.time_travel_imminent,5032,'True'
+speed.value,8,'140'
+lights.internal.time_travel_imminent,5031,'True'
+lights.internal.time_travel_imminent,5031,'True'
         '''
         self.run_vsm('subclauses_arithmetic_booleans', input_data,
                 expected_output.strip() + '\n', False)

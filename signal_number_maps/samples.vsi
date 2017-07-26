@@ -12,8 +12,12 @@ parked 11
 lock.state 13
 lights.external.backup 14
 lights.external.headlights 19
+lights.internal.time_travel_imminent 5031
+lights.external.time_travel_imminent 5032
 camera.backup.active 15
 reverse 16
 wipers 17
+wipers.front.on 5020
 lights 18
 horn 20
+flux_capacitor.energy_generated 5030
