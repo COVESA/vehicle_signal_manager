@@ -329,6 +329,24 @@ car.stop,4,'True'
         self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
                 replay_case='simple0-replay', wait_time_ms=5000)
 
+    def test_unconditional_emit_log_replay(self):
+        '''
+        Regression test to ensure we don't issue duplicate unconditional emits
+        when replaying.
+        '''
+
+        input_data = ''
+        expected_output = '''
+lock.state,13,'true'
+State = {
+lock.state = true
+}
+lock.state,13,'true'
+        '''
+        self.run_vsm('unconditional_emit', input_data,
+                expected_output.strip() + '\n',
+                replay_case='unconditional_emit', wait_time_ms=500)
+
     def test_simple3_xor_condition(self):
         input_data = 'phone.call = "active"\nspeed.value = 5.0'
         expected_output = '''
