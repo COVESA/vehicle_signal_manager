@@ -69,7 +69,7 @@ config_tree = None
 node_refs = {}
 state = None
 signal_to_num = {}
-
+args = None
 
 def _format_signal_msg(signal, value, indicator):
     signum = "[SIGNUM]"
@@ -185,6 +185,20 @@ class State(object):
     def handle_emit(self, data, parent):
         signal = data[NODE_EMIT]["signal"]
         value = data[NODE_EMIT]["value"]
+
+        conditional_node = False
+        for node in parent.children:
+            if node.node_type == NODE_CONDITION:
+                conditional_node = True
+                break
+
+        replaying = False
+        if args.replay_log_file:
+            replaying = True
+
+        # avoid emitting duplicate emit if replaying
+        if not conditional_node and replaying:
+            return None
 
         if signal not in signal_to_num:
             self._exit_signal_num_missing(signal)
@@ -343,6 +357,7 @@ class State(object):
             self.add_rule(identifiers, rule)
         elif NODE_EMIT in item:
             module = self.handle_emit(item, parent)
+            rule = None
             if module != None:
                 rule = compile(module, '<string>', 'exec')
 
