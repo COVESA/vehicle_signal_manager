@@ -1,0 +1,16 @@
+%YAML 1.2
+---
+# set up a 4-deep nesting of conditions to test a greater depth than usual
+- condition: a == true
+  parallel:
+    - condition: b == true
+      start: 500
+      stop:  1000
+      parallel:
+        - condition: c == true
+          start: 1000
+          stop:  1500
+          parallel:
+            - condition: d == true
+              start: 1500
+              stop:  2000
