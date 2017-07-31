@@ -264,21 +264,21 @@ class State(object):
                 signals=parser.identifiers)
         parent.add_child(condition_node)
 
-        if NODE_EMIT in data:
-            action_true_1_module = self.handle_emit(data, parent)
-            action_true_1_body = action_true_1_module.body[0]
-            actions_true = [action_true_1_body]
-        else:
-            actions_true = []
+        emit_signal = None
+        emit_value = None
+        actions_true = []
         actions_false = []
+        if NODE_EMIT in data:
+            emit_signal = data[NODE_EMIT]["signal"]
+            emit_value = data[NODE_EMIT]["value"]
 
         if self.log_categories[LOG_CAT_CONDITION_CHECKS]:
             action_true_2_code = self.generate_condition_code(orig_condition,
-                    True, condition_node)
+                    True, condition_node, emit_signal, emit_value)
             action_true_2 = ast.parse(action_true_2_code)
 
             action_false_code = self.generate_condition_code(orig_condition,
-                    False, condition_node)
+                    False, condition_node, None, None)
             action_false = ast.parse(action_false_code)
 
             actions_true.append(action_true_2.body[0])
@@ -326,11 +326,16 @@ class State(object):
     # NOTE: this is static as variables can't be passed by reference in parsed
     # code so we can't depend on the `self` variable
     @staticmethod
-    def condition_changed(condition, result, node_ref):
+    def condition_changed(condition, result, node_ref, emit_signal=None,
+            emit_value=None):
         node = node_refs[node_ref]
         node.notify_condition(result)
 
+        all_ancestor_conditions_met = True
         for ancestor in node.get_ancestor_conditions():
+            if not ancestor.condition_met:
+                all_ancestor_conditions_met = False
+
             if ancestor.signals:
                 for signal in ancestor.signals:
                     logger.i("parent condition: {} == {}".format(signal,
@@ -338,12 +343,22 @@ class State(object):
 
         logger.i("condition: ({}) => {}".format(condition, str(result)))
 
-    def generate_condition_code(self, condition, result, node):
+        # emit the corresponding signal if all ancestor conditions have been met
+        if all_ancestor_conditions_met and result and emit_signal:
+            emit(emit_signal, emit_value)
+
+    def generate_condition_code(self, condition, result, node, emit_signal,
+            emit_value):
         node_ref = repr(node)
         node_refs[node_ref] = node
 
-        return "State.condition_changed({}, {}, \'{}\')".format(repr(condition),
-                result, node_ref)
+        if emit_signal:
+            return "State.condition_changed({}, {}, \'{}\', \'{}\', " \
+                    "\'{}\')".format(repr(condition), result, node_ref,
+                            emit_signal, emit_value)
+        else:
+            return "State.condition_changed({}, {}, \'{}\')".format(
+                    repr(condition), result, node_ref)
 
     def __parse_items(self, item, parent):
         conditions_rules = None
@@ -506,6 +521,8 @@ class LogReplayer(object):
                 delayed_got_signal(signal.name, signal.value,
                         remaining_delay_ms, state)
             if signal.direction == self.Signal.DIRECTION_OUT:
+                # don't need to check conditions of parents as that has already
+                # happened in the log we're replaying
                 delayed_emit(signal.name, signal.value, remaining_delay_ms,
                         state)
 

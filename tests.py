@@ -173,12 +173,12 @@ transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
+condition: (transmission.gear == 'reverse') => True
 car.backup,3,'True'
 State = {
 car.backup = True
 transmission.gear = reverse
 }
-condition: (transmission.gear == 'reverse') => True
 transmission.gear,9,'"reverse"'
 car.backup,3,'True'
         '''
@@ -227,13 +227,13 @@ State = {
 damage = True
 moving = False
 }
+condition: (moving != True and damage == True) => True
 car.stop,4,'True'
 State = {
 car.stop = True
 damage = True
 moving = False
 }
-condition: (moving != True and damage == True) => True
 damage,5,'True'
 car.stop,4,'True'
         '''
@@ -291,13 +291,13 @@ State = {
 damage = True
 moving = False
 }
+condition: (moving != True and damage == True) => True
 car.stop,4,'True'
 State = {
 car.stop = True
 damage = True
 moving = False
 }
-condition: (moving != True and damage == True) => True
 moving,6,'False'
 damage,5,'True'
 car.stop,4,'True'
@@ -359,13 +359,13 @@ State = {
 phone.call = active
 speed.value = 5.0
 }
+condition: (phone.call == 'active' ^^ speed.value > 50.90) => True
 car.stop,4,'True'
 State = {
 car.stop = True
 phone.call = active
 speed.value = 5.0
 }
-condition: (phone.call == 'active' ^^ speed.value > 50.90) => True
 phone.call,7,'"active"'
 speed.value,8,'5.0'
 car.stop,4,'True'
@@ -401,12 +401,12 @@ transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
+condition: (transmission.gear == 'reverse') => True
 lights.external.backup,14,'True'
 State = {
 lights.external.backup = True
 transmission.gear = reverse
 }
-condition: (transmission.gear == 'reverse') => True
 camera.backup.active,15,True
 State = {
 camera.backup.active = True
@@ -452,12 +452,12 @@ transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
+condition: (transmission.gear == 'reverse') => True
 lights.external.backup,14,'True'
 State = {
 lights.external.backup = True
 transmission.gear = reverse
 }
-condition: (transmission.gear == 'reverse') => True
 condition not met by 'start' time of 200ms
 transmission.gear,9,'reverse'
 transmission.gear,9,'"forward"'
@@ -496,12 +496,12 @@ transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
+condition: (transmission.gear == 'reverse') => True
 lights.external.backup,14,'True'
 State = {
 lights.external.backup = True
 transmission.gear = reverse
 }
-condition: (transmission.gear == 'reverse') => True
 transmission.gear,9,'forward'
 State = {
 lights.external.backup = True
@@ -619,18 +619,19 @@ transmission.gear,9,'reverse'
 State = {
 transmission.gear = reverse
 }
+condition: (transmission.gear == 'reverse') => True
 reverse,16,'True'
 State = {
 reverse = True
 transmission.gear = reverse
 }
-condition: (transmission.gear == 'reverse') => True
 wipers,17,True
 State = {
 reverse = True
 transmission.gear = reverse
 wipers = True
 }
+condition: (wipers == True) => True
 lights,18,'on'
 State = {
 lights = on
@@ -638,7 +639,6 @@ reverse = True
 transmission.gear = reverse
 wipers = True
 }
-condition: (wipers == True) => True
 transmission.gear,9,'"reverse"'
 reverse,16,'True'
 wipers,17,'True'
@@ -659,18 +659,19 @@ transmission.gear,9,'park'
 State = {
 transmission.gear = park
 }
+condition: (transmission.gear == 'park') => True
 parked,11,'True'
 State = {
 parked = True
 transmission.gear = park
 }
-condition: (transmission.gear == 'park') => True
 ignition,10,True
 State = {
 ignition = True
 parked = True
 transmission.gear = park
 }
+condition: (ignition == True) => True
 ignited,12,'True'
 State = {
 ignited = True
@@ -678,7 +679,6 @@ ignition = True
 parked = True
 transmission.gear = park
 }
-condition: (ignition == True) => True
 transmission.gear,9,'"park"'
 parked,11,'True'
 ignition,10,'True'
@@ -705,19 +705,20 @@ State = {
 ignition = True
 transmission.gear = park
 }
+condition: (transmission.gear == 'park') => True
 parked,11,'True'
 State = {
 ignition = True
 parked = True
 transmission.gear = park
 }
-condition: (transmission.gear == 'park') => True
 ignition,10,True
 State = {
 ignition = True
 parked = True
 transmission.gear = park
 }
+condition: (ignition == True) => True
 ignited,12,'True'
 State = {
 ignited = True
@@ -725,7 +726,6 @@ ignition = True
 parked = True
 transmission.gear = park
 }
-condition: (ignition == True) => True
 ignition,10,'True'
 transmission.gear,9,'"park"'
 parked,11,'True'
@@ -779,11 +779,6 @@ flux_capacitor.energy_generated,5030,1.1
 State = {
 flux_capacitor.energy_generated = 1.1
 }
-lights.external.time_travel_imminent,5032,'True'
-State = {
-flux_capacitor.energy_generated = 1.1
-lights.external.time_travel_imminent = True
-}
 condition: (flux_capacitor.energy_generated >= 1.21 * 0.9 and not (flux_capacitor.energy_generated >= 1.21)
 ) => True
 lights.external.time_travel_imminent,5032,'True'
@@ -793,19 +788,17 @@ lights.external.time_travel_imminent = True
 }
 condition: (flux_capacitor.energy_generated >= 1.21 * 0.9 and not (flux_capacitor.energy_generated >= 1.21)
 ) => True
+lights.external.time_travel_imminent,5032,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+}
 speed.value,8,140
 State = {
 flux_capacitor.energy_generated = 1.1
 lights.external.time_travel_imminent = True
 speed.value = 140
 }
-lights.internal.time_travel_imminent,5031,'True'
-State = {
-flux_capacitor.energy_generated = 1.1
-lights.external.time_travel_imminent = True
-lights.internal.time_travel_imminent = True
-speed.value = 140
-}
 condition: (( speed.value >= (88 - 10) * 1.6 and speed.value <  88 * 1.6 ) or ( flux_capacitor.energy_generated >= 1.21 * 0.9 and flux_capacitor.energy_generated < 1.21 )
 ) => True
 lights.internal.time_travel_imminent,5031,'True'
@@ -817,6 +810,13 @@ speed.value = 140
 }
 condition: (( speed.value >= (88 - 10) * 1.6 and speed.value <  88 * 1.6 ) or ( flux_capacitor.energy_generated >= 1.21 * 0.9 and flux_capacitor.energy_generated < 1.21 )
 ) => True
+lights.internal.time_travel_imminent,5031,'True'
+State = {
+flux_capacitor.energy_generated = 1.1
+lights.external.time_travel_imminent = True
+lights.internal.time_travel_imminent = True
+speed.value = 140
+}
 flux_capacitor.energy_generated,5030,'1.1'
 lights.external.time_travel_imminent,5032,'True'
 lights.external.time_travel_imminent,5032,'True'
