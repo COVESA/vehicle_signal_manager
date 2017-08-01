@@ -1,0 +1,11 @@
+%YAML 1.2
+---
+# test case for the situation that start is set to 0
+- condition: parked == true
+  parallel:
+  - condition: horn == true
+    start: 0
+    stop: 1000
+    emit:
+      signal: wipers
+      value: false

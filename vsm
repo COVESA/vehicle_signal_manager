@@ -708,7 +708,11 @@ class TreeNode:
                 self.stop_timer = threading.Timer(self.stop_time_ms/1000,
                         self.stop_timeout_func)
                 self.start_timer.start()
-                self.stop_timer.start()
+                # check the timer still exists because it may be cleared out
+                # with a start time of zero if the inner condition is not
+                # already met
+                if self.stop_timer:
+                    self.stop_timer.start()
         else:
             # parent condition is no longer true so cancel monitor
             self._monitor_completed(True, "")

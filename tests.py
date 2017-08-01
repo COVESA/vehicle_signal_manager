@@ -853,6 +853,62 @@ horn,20,'true'
         self.run_vsm('nested_simple', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1500)
 
+    def test_start_0_child_unmet(self):
+        '''
+        Ensure that we can use a start time of zero and meet its parent
+        condition without crashing.
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'parked = true'
+        expected_output = '''
+parked,11,True
+State = {
+parked = True
+}
+condition not met by 'start' time of 0ms
+condition: (parked == True) => True
+parked,11,'true'
+        '''
+        self.run_vsm('start_0', input_data,
+                expected_output.strip() + '\n', wait_time_ms=1200)
+
+    def test_start_0_child_met(self):
+        '''
+        Ensure that we can use a start time of zero and meet the full chain of
+        conditions without crashing.
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'horn = true\n' \
+                'parked = true'
+        expected_output = '''
+horn,20,True
+State = {
+horn = True
+}
+parent condition: parked == (unset)
+condition: (horn == True) => True
+parked,11,True
+State = {
+horn = True
+parked = True
+}
+condition: (parked == True) => True
+horn,20,'true'
+parked,11,'true'
+        '''
+        self.run_vsm('start_0', input_data,
+                expected_output.strip() + '\n', wait_time_ms=1200)
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
     unittest.TextTestRunner(verbosity=2).run(suite)
