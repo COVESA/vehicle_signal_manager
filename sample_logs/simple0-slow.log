@@ -1,0 +1,6 @@
+> 2000,phone.call,[SIGNUM],'active'
+State = {
+phone.call = active
+}
+< 4000,car.stop,[SIGNUM],'True'
+condition: (phone.call == 'active') => True
