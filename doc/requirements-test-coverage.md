@@ -30,6 +30,8 @@ external mapping file (req. ID5)
 in the Vehicle Signal Specification project (req. ID6)
 * The Policy Manager shall emit an error if a rule contains a signal
 name not present in the mapping file (req. ID7)
+* The Policy Manager shall receive signals with numerical IDs (req.
+ID1)
 
 `test_subclauses_arithmetic_booleans`:
 `test_simple3_xor_condition`:
@@ -117,17 +119,20 @@ specified by Python 3 Language Reference, Lexical analysis, chapter
 `test_simple0_log_replay`:
 * The Policy Manager shall be able to replay signals captured during
 an earlier session. (req. SR14)
+
+Manual test: Test Replay Rates (Slow):
+Manual test: Test Replay Rates (Fast):
 * The signal replay shall happen with the same timing as the signals
 were captured with. (req. SR15)
+* The signals will be replayed at the specified percentage of the
+speed they were originally received at, with 100.0% being the same
+speed. (req. SR18)
+
+Manual test: Test Replay Rates (Normal):
 * The signal replay shall be able to adjust the speed of the replay,
 compared to the timing the signals were captured with. (req. SR16)
 * The speed shall be provided as a decimal value between 0.0% and
 10000.0% (req. SR17)
-* The signals will be replayed at the specified percentage of the
-speed they were originally received at, with 100.0% being the same
-speed. (req. SR18)
-* The Policy Manager shall receive signals with numerical IDs (req.
-ID1)
 
 Requirements not fulfilled in time for Sprint 6
 ===============================================
