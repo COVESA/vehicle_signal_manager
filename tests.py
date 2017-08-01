@@ -517,6 +517,96 @@ transmission.gear,9,'"forward"'
         self.run_vsm('monitored_condition', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1500)
 
+    def test_nested_4_condition_satisfied(self):
+        '''
+        This test case triggers the parent monitored condition and satisfies its
+        three descendents to fully-satisfy a 4-deep nesting of conditions.
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'a = true\n' \
+                'b = true\n' \
+                'c = true\n' \
+                'd = true'
+        expected_output = '''
+a,5040,True
+State = {
+a = True
+}
+condition: (a == True) => True
+b,5041,True
+State = {
+a = True
+b = True
+}
+parent condition: a == True
+condition: (b == True) => True
+c,5042,True
+State = {
+a = True
+b = True
+c = True
+}
+parent condition: b == True
+parent condition: a == True
+condition: (c == True) => True
+d,5043,True
+State = {
+a = True
+b = True
+c = True
+d = True
+}
+parent condition: c == True
+parent condition: b == True
+parent condition: a == True
+condition: (d == True) => True
+a,5040,'true'
+b,5041,'true'
+c,5042,'true'
+d,5043,'true'
+        '''
+        self.run_vsm('nested_4', input_data,
+                expected_output.strip() + '\n', wait_time_ms=2200)
+
+    def test_nested_4_condition_child_failure(self):
+        '''
+        This test case triggers the parent monitored condition and fails one of
+        the middle conditions by the timeout.
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'a = true\n' \
+                'b = true'
+        expected_output = '''
+a,5040,True
+State = {
+a = True
+}
+condition: (a == True) => True
+b,5041,True
+State = {
+a = True
+b = True
+}
+parent condition: a == True
+condition: (b == True) => True
+condition not met by 'start' time of 1000ms
+condition not met by 'start' time of 1500ms
+a,5040,'true'
+b,5041,'true'
+        '''
+        self.run_vsm('nested_4', input_data,
+                expected_output.strip() + '\n', wait_time_ms=2200)
+
     def test_parallel(self):
         # skip when running with IPC module because output is slightly different
         if self.ipc_module:

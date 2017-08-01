@@ -21,3 +21,7 @@ wipers.front.on 5020
 lights 18
 horn 20
 flux_capacitor.energy_generated 5030
+a 5040
+b 5041
+c 5042
+d 5043
