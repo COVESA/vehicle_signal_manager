@@ -827,6 +827,32 @@ lights.internal.time_travel_imminent,5031,'True'
         self.run_vsm('subclauses_arithmetic_booleans', input_data,
                 expected_output.strip() + '\n', False)
 
+    def test_nested_child_before_parent(self):
+        '''
+        Ensure that we can safely set a nested condition before its parent.
+
+        Originally, this caused a crash.
+        '''
+
+        # skip when running with IPC module because error messages are not
+        # transmitted
+        if self.ipc_module:
+            self.skipTest("test not compatible with IPC module")
+
+        input_data = 'horn = true'
+        expected_output = '''
+horn,20,True
+State = {
+horn = True
+}
+parent condition: parked == (unset)
+parent condition: car.stop == (unset)
+condition: (horn == True) => True
+horn,20,'true'
+        '''
+        self.run_vsm('nested_simple', input_data,
+                expected_output.strip() + '\n', wait_time_ms=1500)
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
     unittest.TextTestRunner(verbosity=2).run(suite)

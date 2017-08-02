@@ -338,8 +338,12 @@ class State(object):
 
             if ancestor.signals:
                 for signal in ancestor.signals:
+                    ancestor_value = "(unset)"
+                    if signal in vars(state.variables):
+                        ancestor_value = vars(state.variables)[signal]
+
                     logger.i("parent condition: {} == {}".format(signal,
-                        vars(state.variables)[signal]))
+                        ancestor_value))
 
         logger.i("condition: ({}) => {}".format(condition, str(result)))
 
