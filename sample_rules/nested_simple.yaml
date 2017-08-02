@@ -1,0 +1,12 @@
+- condition: car.stop == true
+  parallel:
+  - condition: parked == true
+    start: 3000
+    stop: 5000
+    parallel:
+    - condition: horn == true
+      start: 6000
+      stop: 10000
+      emit:
+        signal: wipers
+        value: false
