@@ -73,6 +73,8 @@ class TestVSM(unittest.TestCase):
         context = zmq.Context()
         self._zmq_socket = context.socket(zmq.PAIR)
         self._zmq_socket.connect(self._zmq_addr)
+        # set maximum wait on receiving (in ms)
+        self._zmq_socket.RCVTIMEO = 200
 
     def _tear_down_zeromq(self):
         self._zmq_socket.close()
@@ -90,6 +92,28 @@ class TestVSM(unittest.TestCase):
 
         raise NotImplemented
 
+    def _receive_all(self, signal_to_num):
+        if TestVSM.ipc_module == 'zeromq':
+            import zmq
+
+            process_output = ''
+
+            # keep receiving output, one line at a time, until empty (defined as
+            # a timeout of self._zmq_socket.RCVTIMEO ms -- see where that is set
+            # for more information)
+            while True:
+                try:
+                    sig, val = self._receive()
+                    process_output += _signal_format_safe(signal_to_num, sig,
+                            val)
+                except zmq.error.Again:
+                    # timed out on receive (which happens when we've received
+                    # all output)
+                    break
+
+            return process_output
+
+        raise NotImplemented
 
     def run_vsm(self, name, input_data, expected_output,
                 use_initial=True, send_quit=False, replay_case=None,
@@ -125,24 +149,28 @@ class TestVSM(unittest.TestCase):
 
             process = Popen(cmd)
 
-            process_output = ''
+            process_output = self._receive_all(signal_to_num)
+
             for signal, value in format_ipc_input(input_data):
                 self._send(signal, value)
                 # Record sent signal directly from the test.
                 process_output += _signal_format_safe(signal_to_num, signal,
                                                       value)
 
+                # fetch any pending output so send and receive output maintain
+                # chronological ordering
+                process_output += self._receive_all(signal_to_num)
+
             # Send 'quit' for those tests with no signal reply, otherwise
             # they will be stuck on 'receive'.
             if send_quit:
                 self._send('quit', '')
 
-            sig, val = self._receive()
             # Give some time for the logger to write all the output.
-            time.sleep(0.01)
-            process.terminate()
+            time.sleep(1)
+            process_output += self._receive_all(signal_to_num)
 
-            process_output += _signal_format_safe(signal_to_num, sig, val)
+            process.terminate()
         else:
             process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
@@ -164,7 +192,6 @@ class TestVSM(unittest.TestCase):
         output_final = log_output + process_output
 
         self.assertEqual(output_final , expected_output)
-
 
     def test_simple0(self):
         input_data = 'transmission.gear = "reverse"'
@@ -309,6 +336,7 @@ car.stop,4,'True'
         A test of the log replay functionality
         '''
 
+        # replay output is not currently forwarded to IPC modules
         if self.ipc_module:
             self.skipTest("test not compatible with IPC module")
 
@@ -379,11 +407,6 @@ car.stop,4,'True'
         error message in the expected output).
         '''
 
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'transmission.gear = "forward"\n' \
                 'transmission.gear = "reverse"\n' \
                 'camera.backup.active = True'
@@ -422,7 +445,7 @@ lights.external.backup,14,'True'
 camera.backup.active,15,'True'
         '''
         self.run_vsm('monitored_condition', input_data,
-                expected_output.strip() + '\n', wait_time_ms=1500)
+                expected_output.strip() + '\n', wait_time_ms=2500)
 
     def test_monitored_condition_child_failure(self):
         '''
@@ -430,11 +453,6 @@ camera.backup.active,15,'True'
         intentionally allows it to fail by not satisfying the subcondition
         before the 'stop' timeout.
         '''
-
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
 
         input_data = 'transmission.gear = "forward"\n' \
             'transmission.gear = "reverse"'
@@ -458,7 +476,7 @@ State = {
 lights.external.backup = True
 transmission.gear = reverse
 }
-condition not met by 'start' time of 200ms
+condition not met by 'start' time of 1000ms
 transmission.gear,9,'reverse'
 transmission.gear,9,'"forward"'
 transmission.gear,9,'"reverse"'
@@ -473,11 +491,6 @@ lights.external.backup,14,'True'
         evaluation of the parent condition to cancel the monitor before the
         'stop' timeout.
         '''
-
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
 
         input_data = 'transmission.gear = "forward"\n' \
             'transmission.gear = "reverse" \n' \
@@ -522,11 +535,6 @@ transmission.gear,9,'"forward"'
         This test case triggers the parent monitored condition and satisfies its
         three descendents to fully-satisfy a 4-deep nesting of conditions.
         '''
-
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
 
         input_data = 'a = true\n' \
                 'b = true\n' \
@@ -579,11 +587,6 @@ d,5043,'true'
         the middle conditions by the timeout.
         '''
 
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'a = true\n' \
                 'b = true'
         expected_output = '''
@@ -608,10 +611,6 @@ b,5041,'true'
                 expected_output.strip() + '\n', wait_time_ms=2200)
 
     def test_parallel(self):
-        # skip when running with IPC module because output is slightly different
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'transmission.gear = "reverse"\n'\
                 'wipers = True'
         expected_output = '''
@@ -648,10 +647,6 @@ lights,18,'on'
                 False)
 
     def test_sequence_in_order(self):
-        # skip when running with IPC module because output is slightly different
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'transmission.gear = "park"\n' \
                 'ignition = True'
         expected_output = '''
@@ -687,10 +682,6 @@ ignited,12,'True'
         self.run_vsm('sequence', input_data, expected_output.strip() + '\n')
 
     def test_sequence_out_then_in_order(self):
-        # skip when running with IPC module because output is slightly different
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'ignition = True\n' \
                 'transmission.gear = "park"\n' \
                 'ignition = True'
@@ -769,10 +760,6 @@ lights.external.headlights,19,'True'
                 wait_time_ms=2500)
 
     def test_subclauses_arithmetic_booleans(self):
-        # skip when running with IPC module because output is slightly different
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'flux_capacitor.energy_generated = 1.1\nspeed.value = 140'
         expected_output = '''
 flux_capacitor.energy_generated,5030,1.1
@@ -834,11 +821,6 @@ lights.internal.time_travel_imminent,5031,'True'
         Originally, this caused a crash.
         '''
 
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'horn = true'
         expected_output = '''
 horn,20,True
@@ -859,11 +841,6 @@ horn,20,'true'
         condition without crashing.
         '''
 
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
-
         input_data = 'parked = true'
         expected_output = '''
 parked,11,True
@@ -882,11 +859,6 @@ parked,11,'true'
         Ensure that we can use a start time of zero and meet the full chain of
         conditions without crashing.
         '''
-
-        # skip when running with IPC module because error messages are not
-        # transmitted
-        if self.ipc_module:
-            self.skipTest("test not compatible with IPC module")
 
         input_data = 'horn = true\n' \
                 'parked = true'

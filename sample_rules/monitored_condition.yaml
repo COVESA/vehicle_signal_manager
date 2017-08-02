@@ -26,10 +26,10 @@
       # How many msec do we wait after parent condition becomes true
       # (gear = reverse) until we require our condition (backup camera
       # active) to also be true.
-      start: 200
+      start: 1000
 
       # How many msec after activation do we keep the monitor active?
       # The monitor condition has to remain true for 'stop' milliseconds
       # after the monitor is started. If those criteria are not fulfilled,
       # an error will be logged
-      stop: 1000
+      stop: 2000
