@@ -9,6 +9,7 @@
 # Authors:
 #  * Gustavo Noronha <gustavo.noronha@collabora.com>
 #  * Shane Fagan <shane.fagan@collabora.com>
+#  * Guillaume Tucker <guillaume.tucker@collabora.com>
 
 import sys
 import os
@@ -18,7 +19,7 @@ import ast
 import threading
 import time
 import json
-from ipc.loader import load_plugin, LoaderError
+import ipc
 import os
 import uuid
 import vsmlib.utils
@@ -68,6 +69,7 @@ config_tree = None
 # parsed code so we can't encapsulate it
 node_refs = {}
 state = None
+ipc_obj = None
 signal_to_num = {}
 args = None
 
@@ -771,7 +773,7 @@ class TreeNode:
     def _sequence_iterate_safe(self, condition_grandchild):
         if self.node_type != NODE_SEQUENCE:
             return
-        
+
         if condition_grandchild.condition_is_sequence_next():
             self.next_grandchild_index += 1
             # there will be exactly one condition per child node
@@ -814,7 +816,7 @@ class TreeNode:
         conditions_matched = []
         for child in self.children:
             conditions_matched.extend(child.get_conditions_by_rule(rule))
-        
+
         if self.node_type == NODE_CONDITION and self.rule is rule:
             conditions_matched.append(self)
 
@@ -826,8 +828,31 @@ def show(signal, value, indicator):
     '''
     print(_format_signal_msg(signal, value, indicator))
 
-def send(signal, value):
-    show(signal, value, SIGNAL_PREFIX_OUTGOING)
+
+class StdioIPC(ipc.IPC):
+
+    def send(self, signal, value):
+        show(signal, value, SIGNAL_PREFIX_OUTGOING)
+
+    def receive(self):
+        '''
+            Loop to grab logic from stdin
+        '''
+        for line in sys.stdin:
+            line = line.replace(" ", "").strip('\n')
+            if line == "":
+                # Ignore blank lines
+                continue
+            if line == "quit":
+                exit(0)
+            elif "=" in line:
+                line = line.split("=")
+                show(line[0], line[1], SIGNAL_PREFIX_INCOMING)
+                return (line[0], line[1])
+            else:
+                show(line, None, SIGNAL_PREFIX_INCOMING)
+                return (line, None)
+
 
 # this includes an unused state parameter so it matches the signature of
 # delayed_got_signal() for log replay purposes
@@ -838,7 +863,7 @@ def delayed_emit(signal, value, delay, state=None):
 def emit(signal, value):
     # Record sent signal in logs.
     logger.signal(signal, value, SIGNAL_PREFIX_OUTGOING)
-    send(signal, value)
+    ipc_obj.send(signal, value)
     state._update_report_state(signal, value)
 
 def delayed_got_signal(signal, value, delay, state):
@@ -904,36 +929,17 @@ def log_processor(pipein_fd, log_file_path):
 
     pipein.close()
 
-def receive():
-    '''
-        Loop to grab logic from stdin
-    '''
-    for line in sys.stdin:
-        line = line.replace(" ", "").strip('\n')
-        if line == "":
-            # Ignore blank lines
-            continue
-        if line == "quit":
-            exit(0)
-        elif "=" in line:
-            line = line.split("=")
-            show(line[0], line[1], SIGNAL_PREFIX_INCOMING)
-            return (line[0], line[1])
-        else:
-            show(line, None, SIGNAL_PREFIX_INCOMING)
-            return (line, None)
-
 def run(state):
     try:
         while True:
-            message = receive()
+            message = ipc_obj.receive()
             if message == None:
                 exit(0)
 
             signal, value = message
             # 'quit' signal to close VSM endpoint.
             if signal == 'quit':
-                send('', '')
+                ipc_obj.send('', '')
                 break
 
             process(state, signal, value)
@@ -1000,14 +1006,7 @@ if __name__ == "__main__":
         else:
             logger = Logger(pipeout_fd)
 
-        if args.ipc_module:
-            # Load IPC plugin.
-            # Override the receive/send functions with the plugin version.
-            try:
-                load_plugin('ipc.{}'.format(args.ipc_module))
-            except LoaderError as err:
-                logger.e(err)
-                exit(1)
+        ipc_obj = ipc.load(args.ipc_module) if args.ipc_module else StdioIPC()
 
         config_tree = TreeNode(NODE_ROOT, None)
 
