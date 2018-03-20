@@ -831,6 +831,9 @@ def show(signal, value, indicator):
 
 class StdioIPC(ipc.IPC):
 
+    def fileno(self):
+        return sys.stdin.fileno()
+
     def send(self, signal, value):
         show(signal, value, SIGNAL_PREFIX_OUTGOING)
 
@@ -957,7 +960,8 @@ if __name__ == "__main__":
                         help='Initial state, yaml file', required=False)
     parser.add_argument('rules', type=str,
                         help='yaml rules configuration')
-    parser.add_argument('--ipc-module', type=str, help='Load IPC module')
+    parser.add_argument('--ipc-modules', type=str, nargs='+',
+                        help="List of IPC modules to load")
     parser.add_argument('--log-file', type=str,
             help='Write extra (non-signal emission) output to this file')
     parser.add_argument('--no-log-condition-checks',
@@ -1006,7 +1010,12 @@ if __name__ == "__main__":
         else:
             logger = Logger(pipeout_fd)
 
-        ipc_obj = ipc.load(args.ipc_module) if args.ipc_module else StdioIPC()
+        if not args.ipc_modules:
+            ipc_obj = StdioIPC()
+        elif len(args.ipc_modules) == 1:
+            ipc_obj = ipc.load(args.ipc_modules[0])
+        else:
+            ipc_obj = ipc.IPCList(args.ipc_modules)
 
         config_tree = TreeNode(NODE_ROOT, None)
 
