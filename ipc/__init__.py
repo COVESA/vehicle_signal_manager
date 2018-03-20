@@ -8,6 +8,7 @@
 #  * Guillaume Tucker <guillaume.tucker@collabora.com>
 
 import importlib
+import select
 
 
 def load(name, *args, **kwargs):
@@ -58,3 +59,46 @@ class IPC(object):
         same format as for the send(signal, value) method arguments.
         """
         raise NotImplementedError("IPC.receive")
+
+
+class FilenoIPC(IPC):
+    """Interface for IPC modules that read from a file descriptor.
+
+    In order to be able to wait for an input from multiple modules, each IPC
+    module needs to provide a file descriptor via the fileno() method.  This
+    will then be used directly with the select() standard library function.
+    """
+    def fileno(self):
+        """Return the file descriptor to use to read incoming data."""
+        raise NotImplementedError("IPC.fileno")
+
+
+class IPCList(IPC):
+    """List of multiple IPC modules to use in parallel.
+
+    This will instanciate a list of class names and use them as a list of IPC
+    modules.  Each signal that the VSM needs to send will be sent through all
+    the modules.  Likewise, a signal received from any module will be used by
+    the VSM.  Each module that needs to be able to receive signals must
+    implement the FilenoIPC interface (essentially the fileno() method) for
+    this purpose.  Modules without this method will only be able to send
+    signals, not receive any.
+    """
+
+    def __init__(self, names):
+        self._list = list(load(name) for name in names)
+        self._inputs = list(i for i in self._list if hasattr(i, 'fileno'))
+        self._read = list()
+
+    def close(self):
+        for i in self._list:
+            i.close()
+
+    def send(self, *args, **kw):
+        for i in self._list:
+            i.send(*args, **kw)
+
+    def receive(self, *args, **kw):
+        if not self._read:
+            self._read, _, _ = select.select(self._inputs, [], [])
+        return self._read.pop().receive(*args, **kw)
