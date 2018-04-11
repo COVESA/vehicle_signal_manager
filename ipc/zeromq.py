@@ -1,39 +1,30 @@
-#  Copyright (C) 2017, Jaguar Land Rover
+# Copyright (C) 2017, Jaguar Land Rover
+# Copyright (C) 2018 Collabora Limited
 #
-#  This program is licensed under the terms and conditions of the
-#  Mozilla Public License, version 2.0.  The full text of the 
-#  Mozilla Public License is at https://www.mozilla.org/MPL/2.0/
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
+# Authors:
+#  * Guillaume Tucker <guillaume.tucker@collabora.com>
 
+import ipc
 import zmq
 
 SOCKET_ADDR="tcp://127.0.0.1:9090"
-socket = None
 
-# The module public interface consists of the following functions:
-#
-# send    - Function to send signal.
-#           It takes signal ID and value as arguments.
-#
-# receive - Function to receive signal.
-#           It returns the received message as a tuple of (ID, Value).
+class ZeromqIPC(ipc.IPC):
 
-def connect():
-    global socket
-    context = zmq.Context()
+    def __init__(self):
+        self._context = zmq.Context()
+        self._socket = self._context.socket(zmq.PAIR)
+        self._socket.bind(SOCKET_ADDR)
 
-    socket = context.socket(zmq.PAIR)
-    socket.bind(SOCKET_ADDR)
+    def close(self):
+        self._socket.close()
 
-def close():
-    socket.close()
+    def send(self, signal, value):
+        self._socket.send_pyobj((signal, value))
 
-
-def send(signal, value):
-    # Send Python tuple: (Signal ID, Signal Value).
-    socket.send_pyobj((signal, value))
-
-
-def receive():
-    # Receive Python object: (Signal ID, Signal Value).
-    return socket.recv_pyobj()
+    def receive(self):
+        return self._socket.recv_pyobj()
