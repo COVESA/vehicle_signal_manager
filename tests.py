@@ -19,6 +19,7 @@ SIGNAL_FORMAT = '{},{},\'{}\'\n'
 VSM_LOG_FILE = 'vsm-tests.log'
 SIGNAL_NUM_FILE = 'samples.vsi'
 SIGNUM_DEFAULT = "[SIGNUM]"
+ZEROMQ_MODULE = 'ipc.zeromq.ZeromqIPC'
 
 def format_ipc_input(data):
     if not data:
@@ -59,11 +60,11 @@ class TestVSM(unittest.TestCase):
     ipc_module = None
 
     def setUp(self):
-        if TestVSM.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == ZEROMQ_MODULE:
             self._init_zeromq()
 
     def tearDown(self):
-        if TestVSM.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == ZEROMQ_MODULE:
             self._tear_down_zeromq()
 
     def _init_zeromq(self):
@@ -80,20 +81,20 @@ class TestVSM(unittest.TestCase):
         self._zmq_socket.close()
 
     def _send(self, signal, value):
-        if TestVSM.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == ZEROMQ_MODULE:
             self._zmq_socket.send_pyobj((signal, value))
             return
 
         raise NotImplemented
 
     def _receive(self):
-        if TestVSM.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == ZEROMQ_MODULE:
             return self._zmq_socket.recv_pyobj()
 
         raise NotImplemented
 
     def _receive_all(self, signal_to_num):
-        if TestVSM.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == ZEROMQ_MODULE:
             import zmq
 
             process_output = ''
@@ -142,9 +143,9 @@ class TestVSM(unittest.TestCase):
                 cmd += ['--replay-log-file={}'.format(replay_file)]
 
         if TestVSM.ipc_module:
-            cmd += [ '--ipc-module={}'.format(TestVSM.ipc_module) ]
+            cmd += [ '--ipc-modules={}'.format(TestVSM.ipc_module) ]
 
-        if TestVSM.ipc_module == 'zeromq':
+        if TestVSM.ipc_module == ZEROMQ_MODULE:
             signal_to_num, _ = vsmlib.utils.parse_signal_num_file(sig_num_path)
 
             process = Popen(cmd)
@@ -885,6 +886,6 @@ if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
     unittest.TextTestRunner(verbosity=2).run(suite)
 
-    TestVSM.ipc_module = 'zeromq'
+    TestVSM.ipc_module = ZEROMQ_MODULE
     suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
     unittest.TextTestRunner(verbosity=2).run(suite)
