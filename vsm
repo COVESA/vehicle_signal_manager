@@ -19,7 +19,7 @@ import ast
 import threading
 import time
 import json
-import ipc
+import ipc.stream
 import os
 import uuid
 import vsmlib.utils
@@ -829,32 +829,23 @@ def show(signal, value, indicator):
     print(_format_signal_msg(signal, value, indicator))
 
 
-class StdioIPC(ipc.IPC):
-
-    def fileno(self):
-        return sys.stdin.fileno()
+class DebugIPC(ipc.stream.StdioIPC):
 
     def send(self, signal, value):
         show(signal, value, SIGNAL_PREFIX_OUTGOING)
 
     def receive(self):
-        '''
-            Loop to grab logic from stdin
-        '''
-        for line in sys.stdin:
-            line = line.replace(" ", "").strip('\n')
-            if line == "":
-                # Ignore blank lines
-                continue
-            if line == "quit":
-                exit(0)
-            elif "=" in line:
-                line = line.split("=")
-                show(line[0], line[1], SIGNAL_PREFIX_INCOMING)
-                return (line[0], line[1])
-            else:
-                show(line, None, SIGNAL_PREFIX_INCOMING)
-                return (line, None)
+        message = super(DebugIPC, self).receive()
+        if message is not None:
+            signal, value = message
+            show(signal, value, SIGNAL_PREFIX_INCOMING)
+        return message
+
+    def _readline(self):
+        line = super(DebugIPC, self)._readline()
+        if line == "quit":
+            exit(0)
+        return line
 
 
 # this includes an unused state parameter so it matches the signature of
@@ -1011,7 +1002,7 @@ if __name__ == "__main__":
             logger = Logger(pipeout_fd)
 
         if not args.ipc_modules:
-            ipc_obj = StdioIPC()
+            ipc_obj = DebugIPC()
         elif len(args.ipc_modules) == 1:
             ipc_obj = ipc.load(args.ipc_modules[0])
         else:
