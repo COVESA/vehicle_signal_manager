@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-# Copyright (C) 2017 Collabora
+#
+# Copyright (C) 2017, 2018 Jaguar Land Rover
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 # Authors: Shane Fagan - shane.fagan@collabora.com
+#
+# Authors:
+#  * Gustavo Noronha <gustavo.noronha@collabora.com>
+#  * Travis Reitter <travis.reitter@collabora.co.uk>
+#  * Shane Fagan <shane.fagan@collabora.com>
+#  * Luis Araujo <luis.araujo@collabora.co.uk>
+#  * Guillaume Tucker <guillaume.tucker@collabora.com>
 
 import os
 import time

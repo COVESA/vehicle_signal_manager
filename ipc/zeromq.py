@@ -1,11 +1,12 @@
-# Copyright (C) 2017, Jaguar Land Rover
-# Copyright (C) 2018 Collabora Limited
+# Copyright (C) 2017, 2018 Jaguar Land Rover
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 # Authors:
+#  * Luis Araujo <luis.araujo@collabora.co.uk>
+#  * Travis Reitter <travis.reitter@collabora.co.uk>
 #  * Guillaume Tucker <guillaume.tucker@collabora.com>
 
 import ipc
