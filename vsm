@@ -927,8 +927,9 @@ def run(state):
     try:
         while True:
             message = ipc_obj.receive()
-            if message == None:
-                exit(0)
+            if message is None:
+                logger.i("skipping invalid message")
+                continue
 
             signal, value = message
             # 'quit' signal to close VSM endpoint.
