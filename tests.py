@@ -126,7 +126,7 @@ class TestVSM(unittest.TestCase):
         raise NotImplemented
 
     def run_vsm(self, name, input_data, expected_output,
-                use_initial=True, send_quit=False, replay_case=None,
+                use_initial=True, replay_case=None,
                 wait_time_ms=0):
         conf = os.path.join(RULES_PATH, name + '.yaml')
         initial_state = os.path.join(RULES_PATH, name + '.initial.yaml')
@@ -171,10 +171,7 @@ class TestVSM(unittest.TestCase):
                 # chronological ordering
                 process_output += self._receive_all(signal_to_num)
 
-            # Send 'quit' for those tests with no signal reply, otherwise
-            # they will be stuck on 'receive'.
-            if send_quit:
-                self._send('quit', '')
+            self._send('quit', '')
 
             # Give some time for the logger to write all the output.
             time.sleep(1)
@@ -184,13 +181,14 @@ class TestVSM(unittest.TestCase):
         else:
             process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
+            data = (input_data + '\nquit').encode('utf8')
+
             timeout_s = 2
             if wait_time_ms > 0:
                 timeout_s = wait_time_ms / 1000
 
             try:
-                output, _ = process.communicate(input=input_data.encode(),
-                                                timeout=timeout_s)
+                output, _ = process.communicate(data, timeout_s)
             except TimeoutExpired:
                 process.kill()
                 self.fail("VSM process timeout")
@@ -258,8 +256,7 @@ phone.call = inactive
 condition: (phone.call == 'active') => False
 phone.call,7,'"inactive"'
         '''
-        self.run_vsm('simple0', input_data, expected_output.strip() + '\n',
-                send_quit=True)
+        self.run_vsm('simple0', input_data, expected_output.strip() + '\n')
 
     def test_simple2_initial(self):
         input_data = 'damage = True'
@@ -294,8 +291,7 @@ moving = False
 }
 moving,6,'False'
         '''
-        self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
-                send_quit=True)
+        self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
 
     def test_simple2_modify_uninteresting(self):
         '''
@@ -318,8 +314,7 @@ condition: (moving != True and damage == True) => False
 moving,6,'True'
 damage,5,'True'
         '''
-        self.run_vsm('simple2', input_data, expected_output.strip() + '\n',
-                send_quit=True)
+        self.run_vsm('simple2', input_data, expected_output.strip() + '\n')
 
     def test_simple2_multiple_signals(self):
         input_data = 'moving = False\ndamage = True'
