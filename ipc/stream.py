@@ -24,8 +24,8 @@ class StreamIPC(ipc.FilenoIPC):
         self._out = output_stream
 
     def close(self):
-        close(self._in)
-        close(self._out)
+        self._in.close()
+        self._out.close()
 
     def fileno(self):
         return self._in.fileno()
