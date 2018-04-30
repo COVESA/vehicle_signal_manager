@@ -933,7 +933,7 @@ def run(state):
             signal, value = message
             # 'quit' signal to close VSM endpoint.
             if signal == 'quit':
-                ipc_obj.send('', '')
+                ipc_obj.close()
                 break
 
             process(state, signal, value)
