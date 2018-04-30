@@ -20,6 +20,7 @@ from subprocess import Popen, PIPE, TimeoutExpired
 import vsmlib.utils
 import zmq
 import ipc.zeromq
+import ipc.stream
 
 
 RULES_PATH = os.path.abspath(os.path.join('.', 'sample_rules'))
@@ -69,12 +70,13 @@ def _signal_format_safe(signal_to_num, signal, value):
 
 class TestVSMDebug(object):
     module = None
+    quit_command = "\nquit"
 
     def close(self):
         pass
 
     def _run_vsm(self, cmd, input_data, sig_num_path, wait_time_ms):
-        data = (input_data + '\nquit').encode('utf8')
+        data = (input_data + self.quit_command).encode('utf8')
 
         timeout_s = 2
         if wait_time_ms > 0:
@@ -91,6 +93,23 @@ class TestVSMDebug(object):
         cmd_output = output.decode()
 
         return _remove_timestamp(cmd_output)
+
+
+class NoneSignalIPC(ipc.stream.StdioIPC):
+
+    def receive(self):
+        return super(ipc.stream.StdioIPC, self).receive()
+
+    def _readline(self):
+        line = super(NoneSignalIPC, self)._readline()
+        if line == 'not-acceptable':
+            return None
+        return line
+
+
+class TestVSMNoneSignal(TestVSMDebug):
+    module = 'tests.NoneSignalIPC'
+    quit_command = "\nquit=''"
 
 
 class TestVSMZeroMQ(object):
@@ -902,7 +921,29 @@ class VSMZeroMQTests(VSMTestCases):
     ipc_class = TestVSMZeroMQ
 
 
+class VSMNoneSignalTests(TestVSM):
+    ipc_class = TestVSMNoneSignal
+
+    def test_none_signal(self):
+        input_data = 'transmission.gear = "reverse"\nnot-acceptable'
+        expected_output = '''
+transmission.gear,9,'reverse'
+State = {
+transmission.gear = reverse
+}
+condition: (transmission.gear == 'reverse') => True
+car.backup,3,'True'
+State = {
+car.backup = True
+transmission.gear = reverse
+}
+skipping invalid message
+car.backup=True
+'''
+        self.run_vsm('simple0', input_data, expected_output.strip() + '\n')
+
+
 if __name__ == '__main__':
-    for cls in [VSMStdTests, VSMZeroMQTests]:
+    for cls in [VSMStdTests, VSMZeroMQTests, VSMNoneSignalTests]:
         suite = unittest.TestLoader().loadTestsFromTestCase(cls)
         unittest.TextTestRunner(verbosity=2).run(suite)
