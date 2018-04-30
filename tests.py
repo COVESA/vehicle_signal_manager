@@ -18,6 +18,8 @@ import os
 import unittest
 from subprocess import Popen, PIPE, TimeoutExpired
 import vsmlib.utils
+import zmq
+import ipc.zeromq
 
 
 RULES_PATH = os.path.abspath(os.path.join('.', 'sample_rules'))
@@ -27,7 +29,7 @@ SIGNAL_FORMAT = '{},{},\'{}\'\n'
 VSM_LOG_FILE = 'vsm-tests.log'
 SIGNAL_NUM_FILE = 'samples.vsi'
 SIGNUM_DEFAULT = "[SIGNUM]"
-ZEROMQ_MODULE = 'ipc.zeromq.ZeromqIPC'
+
 
 def format_ipc_input(data):
     if not data:
@@ -64,69 +66,104 @@ def _signal_format_safe(signal_to_num, signal, value):
 
     return string
 
-class TestVSM(unittest.TestCase):
-    ipc_module = None
 
-    def setUp(self):
-        if TestVSM.ipc_module == ZEROMQ_MODULE:
-            self._init_zeromq()
+class TestVSMDebug(object):
+    module = None
 
-    def tearDown(self):
-        if TestVSM.ipc_module == ZEROMQ_MODULE:
-            self._tear_down_zeromq()
+    def close(self):
+        pass
 
-    def _init_zeromq(self):
-        import zmq
-        from ipc.zeromq import SOCKET_ADDR
-        self._zmq_addr = SOCKET_ADDR
+    def _run_vsm(self, cmd, input_data, sig_num_path, wait_time_ms):
+        data = (input_data + '\nquit').encode('utf8')
+
+        timeout_s = 2
+        if wait_time_ms > 0:
+            timeout_s = wait_time_ms / 1000
+
+        process = Popen(cmd, stdin=PIPE, stdout=PIPE)
+
+        try:
+            output, _ = process.communicate(data, timeout_s)
+        except TimeoutExpired:
+            process.kill()
+            return None
+
+        cmd_output = output.decode()
+
+        return _remove_timestamp(cmd_output)
+
+
+class TestVSMZeroMQ(object):
+    module = 'ipc.zeromq.ZeromqIPC'
+
+    def __init__(self):
+        self._zmq_addr = ipc.zeromq.SOCKET_ADDR
         context = zmq.Context()
         self._zmq_socket = context.socket(zmq.PAIR)
         self._zmq_socket.connect(self._zmq_addr)
         # set maximum wait on receiving (in ms)
         self._zmq_socket.RCVTIMEO = 200
 
-    def _tear_down_zeromq(self):
+    def close(self):
         self._zmq_socket.close()
 
     def _send(self, signal, value):
-        if TestVSM.ipc_module == ZEROMQ_MODULE:
-            self._zmq_socket.send_pyobj((signal, value))
-            return
-
-        raise NotImplemented
+        self._zmq_socket.send_pyobj((signal, value))
 
     def _receive(self):
-        if TestVSM.ipc_module == ZEROMQ_MODULE:
-            return self._zmq_socket.recv_pyobj()
-
-        raise NotImplemented
+        return self._zmq_socket.recv_pyobj()
 
     def _receive_all(self, signal_to_num):
-        if TestVSM.ipc_module == ZEROMQ_MODULE:
-            import zmq
+        process_output = ''
 
-            process_output = ''
+        # keep receiving output, one line at a time, until empty (defined as
+        # a timeout of self._zmq_socket.RCVTIMEO ms -- see where that is set
+        # for more information)
+        while True:
+            try:
+                sig, val = self._receive()
+                process_output += _signal_format_safe(signal_to_num, sig, val)
+            except zmq.error.Again:
+                # timed out on receive (which happens when we've received
+                # all output)
+                break
 
-            # keep receiving output, one line at a time, until empty (defined as
-            # a timeout of self._zmq_socket.RCVTIMEO ms -- see where that is set
-            # for more information)
-            while True:
-                try:
-                    sig, val = self._receive()
-                    process_output += _signal_format_safe(signal_to_num, sig,
-                            val)
-                except zmq.error.Again:
-                    # timed out on receive (which happens when we've received
-                    # all output)
-                    break
+        return process_output
 
-            return process_output
+    def _run_vsm(self, cmd, input_data, sig_num_path, wait_time_ms):
+        signal_to_num, _ = vsmlib.utils.parse_signal_num_file(sig_num_path)
+        process = Popen(cmd)
+        process_output = self._receive_all(signal_to_num)
 
-        raise NotImplemented
+        for signal, value in format_ipc_input(input_data):
+            self._send(signal, value)
+            # Record sent signal directly from the test.
+            process_output += _signal_format_safe(signal_to_num, signal,
+                                                  value)
 
-    def run_vsm(self, name, input_data, expected_output,
-                use_initial=True, replay_case=None,
-                wait_time_ms=0):
+            # fetch any pending output so send and receive output maintain
+            # chronological ordering
+            process_output += self._receive_all(signal_to_num)
+
+        self._send('quit', '')
+        process.wait()
+
+        process_output += self._receive_all(signal_to_num)
+
+        return process_output
+
+
+class TestVSM(unittest.TestCase):
+    ipc_class = None
+
+    def setUp(self):
+        self.ipc = self.ipc_class()
+
+    def tearDown(self):
+        self.ipc.close()
+
+    def run_vsm(self, name, input_data, expected_output, use_initial=True,
+                replay_case=None, wait_time_ms=0):
         conf = os.path.join(RULES_PATH, name + '.yaml')
         initial_state = os.path.join(RULES_PATH, name + '.initial.yaml')
 
@@ -150,48 +187,14 @@ class TestVSM(unittest.TestCase):
             if os.path.exists(replay_file):
                 cmd += ['--replay-log-file={}'.format(replay_file)]
 
-        if TestVSM.ipc_module:
-            cmd += [ '--ipc-modules={}'.format(TestVSM.ipc_module) ]
+        if self.ipc.module:
+            cmd += ['--ipc-modules={}'.format(self.ipc.module)]
 
-        if TestVSM.ipc_module == ZEROMQ_MODULE:
-            signal_to_num, _ = vsmlib.utils.parse_signal_num_file(sig_num_path)
+        process_output = self.ipc._run_vsm(cmd, input_data, sig_num_path,
+                                           wait_time_ms)
 
-            process = Popen(cmd)
-
-            process_output = self._receive_all(signal_to_num)
-
-            for signal, value in format_ipc_input(input_data):
-                self._send(signal, value)
-                # Record sent signal directly from the test.
-                process_output += _signal_format_safe(signal_to_num, signal,
-                                                      value)
-
-                # fetch any pending output so send and receive output maintain
-                # chronological ordering
-                process_output += self._receive_all(signal_to_num)
-
-            self._send('quit', '')
-            process.wait()
-
-            process_output += self._receive_all(signal_to_num)
-        else:
-            process = Popen(cmd, stdin=PIPE, stdout=PIPE)
-
-            data = (input_data + '\nquit').encode('utf8')
-
-            timeout_s = 2
-            if wait_time_ms > 0:
-                timeout_s = wait_time_ms / 1000
-
-            try:
-                output, _ = process.communicate(data, timeout_s)
-            except TimeoutExpired:
-                process.kill()
-                self.fail("VSM process timeout")
-
-            cmd_output = output.decode()
-
-            process_output = _remove_timestamp(cmd_output)
+        if process_output is None:
+            self.fail("VSM process failed")
 
         # Read state dump from log file.
         with open(VSM_LOG_FILE) as f:
@@ -201,6 +204,9 @@ class TestVSM(unittest.TestCase):
         output_final = log_output + process_output
 
         self.assertEqual(output_final , expected_output)
+
+
+class VSMTestCases(TestVSM):
 
     def test_simple0(self):
         input_data = 'transmission.gear = "reverse"'
@@ -343,7 +349,7 @@ car.stop,4,'True'
         '''
 
         # replay output is not currently forwarded to IPC modules
-        if self.ipc_module:
+        if self.ipc.module:
             self.skipTest("test not compatible with IPC module")
 
         input_data = ''
@@ -887,10 +893,16 @@ parked,11,'true'
         self.run_vsm('start_0', input_data,
                 expected_output.strip() + '\n', wait_time_ms=1200)
 
-if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
-    unittest.TextTestRunner(verbosity=2).run(suite)
 
-    TestVSM.ipc_module = ZEROMQ_MODULE
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestVSM)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+class VSMStdTests(VSMTestCases):
+    ipc_class = TestVSMDebug
+
+
+class VSMZeroMQTests(VSMTestCases):
+    ipc_class = TestVSMZeroMQ
+
+
+if __name__ == '__main__':
+    for cls in [VSMStdTests, VSMZeroMQTests]:
+        suite = unittest.TestLoader().loadTestsFromTestCase(cls)
+        unittest.TextTestRunner(verbosity=2).run(suite)
