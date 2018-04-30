@@ -61,6 +61,9 @@ class StdioIPC(StreamIPC):
     def __init__(self, *args, **kwargs):
         super(StdioIPC, self).__init__(sys.stdin, sys.stdout, *args, **kwargs)
 
+    def receive(self):
+        return super(StdioIPC, self).receive() or ('quit', None)
+
 
 class SocketIPC(StreamIPC):
     """Stream IPC class based on a TCP client connection to a server
