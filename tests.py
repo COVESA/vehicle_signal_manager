@@ -17,7 +17,7 @@
 import os
 import time
 import unittest
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, TimeoutExpired
 import vsmlib.utils
 
 
@@ -188,8 +188,13 @@ class TestVSM(unittest.TestCase):
             if wait_time_ms > 0:
                 timeout_s = wait_time_ms / 1000
 
-            output, _ = process.communicate(input=input_data.encode(),
-                    timeout=timeout_s)
+            try:
+                output, _ = process.communicate(input=input_data.encode(),
+                                                timeout=timeout_s)
+            except TimeoutExpired:
+                process.kill()
+                self.fail("VSM process timeout")
+
             cmd_output = output.decode()
 
             process_output = _remove_timestamp(cmd_output)
