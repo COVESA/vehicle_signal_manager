@@ -15,7 +15,6 @@
 #  * Guillaume Tucker <guillaume.tucker@collabora.com>
 
 import os
-import time
 import unittest
 from subprocess import Popen, PIPE, TimeoutExpired
 import vsmlib.utils
@@ -172,12 +171,9 @@ class TestVSM(unittest.TestCase):
                 process_output += self._receive_all(signal_to_num)
 
             self._send('quit', '')
+            process.wait()
 
-            # Give some time for the logger to write all the output.
-            time.sleep(1)
             process_output += self._receive_all(signal_to_num)
-
-            process.terminate()
         else:
             process = Popen(cmd, stdin=PIPE, stdout=PIPE)
 
