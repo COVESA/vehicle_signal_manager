@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-#
-# Copyright (C) 2017, Jaguar Land Rover
+# Copyright (C) 2017, 2018 Jaguar Land Rover
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
