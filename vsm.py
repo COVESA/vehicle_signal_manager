@@ -62,14 +62,12 @@ WRAPPER_KEYWORDS = (NODE_PARALLEL, NODE_SEQUENCE)
 
 program_start_time_ms = 0
 logger = None
-config_tree = None
 # NOTE: these are global because variables can't be passed by reference in
 # parsed code so we can't encapsulate it
 node_refs = {}
 state = None
 ipc_obj = None
 signal_to_num = {}
-args = None
 delayed_events = set()
 
 
@@ -155,11 +153,13 @@ class State(object):
     '''
         Class to handle states
     '''
-    def __init__(self, initial_state, rules, log_categories):
+    def __init__(self, initial_state, rules, log_categories, replaying):
         class VariablesStorage(object):
             pass
         self.variables = VariablesStorage()
         self.log_categories = log_categories
+        self.replaying = replaying
+        self.config_tree = TreeNode(NODE_ROOT, None)
 
         self.rules = {}
         self.exec_queue = []
@@ -194,12 +194,8 @@ class State(object):
                 conditional_node = True
                 break
 
-        replaying = False
-        if args.replay_log_file:
-            replaying = True
-
         # avoid emitting duplicate emit if replaying
-        if not conditional_node and replaying:
+        if not conditional_node and self.replaying:
             return None
 
         if signal not in signal_to_num:
@@ -410,7 +406,7 @@ class State(object):
                 # as the list item in the YAML file groups its child(ren)
                 # together
                 block_node = TreeNode(NODE_BLOCK, None)
-                config_tree.add_child(block_node)
+                self.config_tree.add_child(block_node)
 
                 rules = self.__parse_items(item, block_node)
 
@@ -432,9 +428,8 @@ class State(object):
             for rule in self.rules[signal]:
                 exec_rule = True
 
-                condition_node_matches = config_tree.get_conditions_by_rule(
-                        rule)
-                for condition in condition_node_matches:
+                matches = self.config_tree.get_conditions_by_rule(rule)
+                for condition in matches:
                     if condition.condition_is_sequence_blocked():
                         logger.e("changed value for signal '{}' ignored " \
                                 "because prior conditions in its sequence " \
@@ -949,9 +944,68 @@ def run(state):
 def get_runtime():
     return round(time.perf_counter() * 1000 - program_start_time_ms)
 
-if __name__ == "__main__":
-    program_start_time_ms = round(time.perf_counter() * 1000)
 
+def set_up_globals(args):
+    global signal_to_num
+
+    signal_to_num, vsi_version = vsmlib.utils.parse_signal_num_file(
+        args.signal_number_file)
+
+
+def start_logger(args):
+    # fork separate process to handle logging so we don't block main process
+    pipein_fd, pipeout_fd = os.pipe()
+    if os.fork() == 0:
+        os.close(pipeout_fd)
+        log_processor(pipein_fd, args.log_file)
+        sys.exit(0)
+    else:
+        os.close(pipein_fd)
+
+        global logger
+
+        if args.log_format == 'catapult':
+            logger = Catapult(pipeout_fd)
+        else:
+            logger = Logger(pipeout_fd)
+
+
+def init_ipc(args):
+    global ipc_obj
+
+    if not args.ipc_modules:
+        ipc_obj = DebugIPC()
+    elif len(args.ipc_modules) == 1:
+        ipc_obj = ipc.load(args.ipc_modules[0])
+    else:
+        ipc_obj = ipc.IPCList(args.ipc_modules)
+
+
+def start_state_machine(args):
+    log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
+    replaying = True if args.replay_log_file else False
+    state = State(args.initial_state, args.rules, log_categories, replaying)
+
+    if args.replay_log_file:
+        LogReplayer(state, args.replay_log_file, args.replay_rate)
+
+    run(state)
+
+
+def main(args):
+    if (args.replay_rate and
+        (args.replay_rate < REPLAY_RATE_MIN or
+         args.replay_rate > REPLAY_RATE_MAX)):
+        raise ValueError("Replay rate must be between {} and {}, inclusive".
+                         format(REPLAY_RATE_MIN, REPLAY_RATE_MAX))
+
+    set_up_globals(args)
+    start_logger(args)
+    init_ipc(args)
+    start_state_machine(args)
+
+
+def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--initial-state', type=str,
                         help='Initial state, yaml file', required=False)
@@ -980,45 +1034,11 @@ if __name__ == "__main__":
     parser.add_argument('--signal-number-file', type=str,
                         help='.vsi file which maps all signal names to numbers',
                         required=True)
+    return parser
+
+
+if __name__ == "__main__":
+    program_start_time_ms = round(time.perf_counter() * 1000)
+    parser = get_parser()
     args = parser.parse_args()
-
-    signal_to_num, vsi_version = vsmlib.utils.parse_signal_num_file(
-        args.signal_number_file)
-
-    log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
-
-    if args.replay_rate and \
-            (args.replay_rate < REPLAY_RATE_MIN or \
-                    args.replay_rate > REPLAY_RATE_MAX):
-        print('Replay rate must be between {} and {}, inclusive'.format(
-            REPLAY_RATE_MIN, REPLAY_RATE_MAX), file=sys.stderr)
-        exit(1)
-
-    # fork separate process to handle logging so we don't block main process
-    pipein_fd, pipeout_fd = os.pipe()
-    if os.fork() == 0:
-        os.close(pipeout_fd)
-        log_processor(pipein_fd, args.log_file)
-    else:
-        os.close(pipein_fd)
-
-        if args.log_format == 'catapult':
-            logger = Catapult(pipeout_fd)
-        else:
-            logger = Logger(pipeout_fd)
-
-        if not args.ipc_modules:
-            ipc_obj = DebugIPC()
-        elif len(args.ipc_modules) == 1:
-            ipc_obj = ipc.load(args.ipc_modules[0])
-        else:
-            ipc_obj = ipc.IPCList(args.ipc_modules)
-
-        config_tree = TreeNode(NODE_ROOT, None)
-
-        state = State(args.initial_state, args.rules, log_categories)
-
-        if args.replay_log_file:
-            LogReplayer(state, args.replay_log_file, args.replay_rate)
-
-        run(state)
+    main(args)
