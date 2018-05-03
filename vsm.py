@@ -978,7 +978,8 @@ def init_ipc(args):
     elif len(args.ipc_modules) == 1:
         ipc_obj = ipc.load(args.ipc_modules[0])
     else:
-        ipc_obj = ipc.IPCList(args.ipc_modules)
+        modules = list(ipc.load(name) for name in args.ipc_modules)
+        ipc_obj = ipc.IPCList(modules)
 
 
 def start_state_machine(args):

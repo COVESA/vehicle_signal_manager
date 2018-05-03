@@ -76,26 +76,25 @@ class FilenoIPC(IPC):
 class IPCList(IPC):
     """List of multiple IPC modules to use in parallel.
 
-    This will instanciate a list of class names and use them as a list of IPC
-    modules.  Each signal that the VSM needs to send will be sent through all
-    the modules.  Likewise, a signal received from any module will be used by
-    the VSM.  Each module that needs to be able to receive signals must
-    implement the FilenoIPC interface (essentially the fileno() method) for
-    this purpose.  Modules without this method will only be able to send
-    signals, not receive any.
+    This class manages a list of IPC modules.  Each signal that the VSM needs
+    to send will be sent through all the modules.  Likewise, a signal received
+    from any module will be used by the VSM.  Each module that needs to be able
+    to receive signals must implement the FilenoIPC interface (essentially the
+    fileno() method) for this purpose.  Modules without this method will only
+    be able to send signals, not receive any.
     """
 
-    def __init__(self, names):
-        self._list = list(load(name) for name in names)
-        self._inputs = list(i for i in self._list if hasattr(i, 'fileno'))
+    def __init__(self, modules):
+        self._modules = modules
+        self._inputs = list(i for i in self._modules if hasattr(i, 'fileno'))
         self._read = list()
 
     def close(self):
-        for i in self._list:
+        for i in self._modules:
             i.close()
 
     def send(self, *args, **kw):
-        for i in self._list:
+        for i in self._modules:
             i.send(*args, **kw)
 
     def receive(self, *args, **kw):
