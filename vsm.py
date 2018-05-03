@@ -70,6 +70,8 @@ state = None
 ipc_obj = None
 signal_to_num = {}
 args = None
+delayed_events = set()
+
 
 def _format_signal_msg(signal, value, indicator):
     signum = "[SIGNUM]"
@@ -849,8 +851,11 @@ class DebugIPC(ipc.stream.StdioIPC):
 # this includes an unused state parameter so it matches the signature of
 # delayed_got_signal() for log replay purposes
 def delayed_emit(signal, value, delay, state=None):
-    time.sleep(delay/1000)
-    emit(signal, value)
+    ev = threading.Event()
+    delayed_events.add(ev)
+    if not ev.wait(delay/1000):
+        emit(signal, value)
+    delayed_events.remove(ev)
 
 def emit(signal, value):
     # Record sent signal in logs.
@@ -933,6 +938,8 @@ def run(state):
             # 'quit' signal to close VSM endpoint.
             if signal == 'quit':
                 ipc_obj.close()
+                for ev in delayed_events:
+                    ev.set()
                 break
 
             process(state, signal, value)
