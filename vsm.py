@@ -927,17 +927,44 @@ def run(state):
     try:
         while True:
             message = ipc_obj.receive()
-            if message is None:
-                logger.i("skipping invalid message")
-                continue
 
-            signal, value = message
-            # 'quit' signal to close VSM endpoint.
-            if signal == 'quit':
-                ipc_obj.close()
-                break
+            #
+            #    If received object is a dictionary, process each signal/value
+            #    pair separately
+            #
+            if isinstance(message,dict):
+              for signal in message:
+                    value = message[signal]
+                    process(state, signal, value)
+            #
+            #    If received object is not a dictionary and not "None", then
+            #    process the single message.
+            #
+            else:
+                if message is None:
+                    logger.i("skipping invalid message")
+                    continue
 
-            process(state, signal, value)
+                signal, value = message
+
+                #
+                #    If this is a "quit" command, close the input and stop
+                #    processing messages.
+                #
+                if signal == 'quit':
+                    ipc_obj.close()
+                    for ev in delayed_events:
+                        ev.set()
+                    break
+                #
+                #    Go process the signal/value pair in this message.
+                #
+                process(state, signal, value)
+
+    #
+    #    If the user has interrupted the program from the keyboard, abort all
+    #    processing and just exit.
+    #
     except KeyboardInterrupt:
         exit(0)
 
