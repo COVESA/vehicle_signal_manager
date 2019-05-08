@@ -1,0 +1,8 @@
+1.0
+rmc.hello 100
+rmc.reply 101
+rmc.tuner.setfrequency 102
+Vehicle.setfrequency 103
+Vehicle.setfrequency.reply 104
+control.result 30010
+control.debug 39010

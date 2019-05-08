@@ -72,6 +72,30 @@ state = None
 ipc_obj = None
 signal_to_num = {}
 args = None
+replayinglog = False
+
+def start_logger(args):
+    # fork separate process to handle logging so we don't block main process
+    pipein_fd, pipeout_fd = os.pipe()
+    if os.fork() == 0:
+        os.close(pipeout_fd)
+        log_processor(pipein_fd, args.log_file)
+        sys.exit(0)
+    else:
+        os.close(pipein_fd)
+
+        global logger
+
+        if args.log_format == 'catapult':
+            logger = Catapult(pipeout_fd)
+        else:
+            logger = Logger(pipeout_fd)
+
+def set_up_globals(args):
+    global signal_to_num
+
+    signal_to_num, vsi_version = vsmlib.utils.parse_signal_num_file(
+        args.signal_number_file)
 
 def _format_signal_msg(signal, value, indicator):
     signum = "[SIGNUM]"
@@ -195,7 +219,7 @@ class State(object):
                 break
 
         replaying = False
-        if args.replay_log_file:
+        if replayinglog:
             replaying = True
 
         # avoid emitting duplicate emit if replaying
@@ -927,22 +951,40 @@ def run(state):
     try:
         while True:
             message = ipc_obj.receive()
-            if message is None:
-                logger.i("skipping invalid message")
-                continue
 
-            signal, value = message
-            # 'quit' signal to close VSM endpoint.
-            if signal == 'quit':
-                ipc_obj.close()
-                break
+            #If received object is a dictionary process each signal, value pair separately
+            if isinstance(message,dict):
+              for signal in message:
+                    value = message[signal]
+                    process(state, signal, value)
+            else :
+                if message is None:
+                    logger.i("skipping invalid message")
+                    continue
 
-            process(state, signal, value)
+                signal, value = message
+
+                # 'quit' signal to close VSM endpoint.
+                if signal == 'quit':
+                    ipc_obj.close()
+                    break
+
+                # process (signal, value) 2-tuple strings
+                process(state, signal, value)
     except KeyboardInterrupt:
         exit(0)
 
 def get_runtime():
     return round(time.perf_counter() * 1000 - program_start_time_ms)
+
+def start_state_machine(args):
+    global config_tree
+    log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
+    replaying = True if args.replay_log_file else False
+    config_tree = TreeNode(NODE_ROOT, None)
+    state = State(args.initial_state, args.rules, log_categories)
+
+    run(state)
 
 if __name__ == "__main__":
     program_start_time_ms = round(time.perf_counter() * 1000)
@@ -977,10 +1019,10 @@ if __name__ == "__main__":
                         required=True)
     args = parser.parse_args()
 
-    signal_to_num, vsi_version = vsmlib.utils.parse_signal_num_file(
-        args.signal_number_file)
+    set_up_globals(args)
 
     log_categories = {LOG_CAT_CONDITION_CHECKS: args.log_condition_checks}
+    replayinglog =  args.replay_log_file
 
     if args.replay_rate and \
             (args.replay_rate < REPLAY_RATE_MIN or \
@@ -997,10 +1039,7 @@ if __name__ == "__main__":
     else:
         os.close(pipein_fd)
 
-        if args.log_format == 'catapult':
-            logger = Catapult(pipeout_fd)
-        else:
-            logger = Logger(pipeout_fd)
+        start_logger(args)
 
         if not args.ipc_modules:
             ipc_obj = DebugIPC()

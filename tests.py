@@ -186,7 +186,7 @@ class TestVSM(unittest.TestCase):
         conf = os.path.join(RULES_PATH, name + '.yaml')
         initial_state = os.path.join(RULES_PATH, name + '.initial.yaml')
 
-        cmd = ['./vsm' ]
+        cmd = ['./vsm.py' ]
 
         sig_num_path = os.path.join(SIGNAL_NUMBER_PATH, SIGNAL_NUM_FILE)
         cmd += [ '--signal-number-file={}'.format(sig_num_path) ]
